@@ -15,9 +15,13 @@ import lombok.Setter;
 @Setter
 @TableName("sys_user")
 public class SysUser extends BaseEntity {
+    private Long tenantId;
     private String username;
     private String passwordHash;
     private String realName;
     private String mobileEncrypted;
     private String status;
+    private String roleCode;
+    private String avatar;
+    private Long classId;
 }

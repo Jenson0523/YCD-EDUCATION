@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 模块: 家校共同体
@@ -17,6 +18,7 @@ import java.time.LocalDate;
 @Setter
 @TableName("fs_home_report")
 public class HomeReport extends BaseEntity {
+    private Long tenantId;
     private Long studentId;
     private Long parentUserId;
     private LocalDate reportDate;
@@ -26,4 +28,7 @@ public class HomeReport extends BaseEntity {
     private String familySpecialSituation;
     private String outgoingReport;
     private String followStatus;
+    private String followRemark;
+    private Long followBy;
+    private LocalDateTime followAt;
 }

@@ -7,10 +7,8 @@
 
 import { request } from './request';
 
-export function createHomeReport(data) {
-  return request({
-    url: '/fs/home-reports',
-    method: 'POST',
-    data
-  });
-}
+export const createHomeReport = (data) =>
+  request({ url: '/fs/home-reports', method: 'POST', data });
+
+export const fetchMyReports = ({ pageNo = 1, pageSize = 10 } = {}) =>
+  request({ url: `/fs/home-reports?pageNo=${pageNo}&pageSize=${pageSize}` });

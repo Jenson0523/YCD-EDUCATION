@@ -1,5 +1,7 @@
 package com.yunchendun.modules.familyschool.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
@@ -7,21 +9,19 @@ import com.yunchendun.common.enums.BusinessModuleEnum;
 import com.yunchendun.modules.familyschool.domain.HomeReport;
 import com.yunchendun.modules.familyschool.mapper.HomeReportMapper;
 import com.yunchendun.system.audit.AuditLog;
+import com.yunchendun.system.domain.SysMessage;
+import com.yunchendun.system.mapper.SysMessageMapper;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 模块: 家校共同体
- * 功能: 居家状态报备接口，体现“居家情况传学校”
+ * 功能: 居家状态报备接口（提交、列表、教师跟进）
  * 创建: 2026-06
  * 作者: 云辰盾项目组
  */
@@ -31,11 +31,19 @@ import java.time.LocalDate;
 public class HomeReportController {
 
     private final HomeReportMapper homeReportMapper;
+    private final SysMessageMapper messageMapper;
 
     @GetMapping
-    public ApiResponse<IPage<HomeReport>> page(@RequestParam(defaultValue = "1") long pageNo,
-                                               @RequestParam(defaultValue = "20") long pageSize) {
-        return ApiResponse.ok(homeReportMapper.selectPage(Page.of(pageNo, pageSize), null));
+    public ApiResponse<IPage<HomeReport>> page(
+            @RequestParam(defaultValue = "1") long pageNo,
+            @RequestParam(defaultValue = "20") long pageSize,
+            @RequestParam(required = false) String followStatus,
+            @RequestParam(required = false) Long studentId) {
+        LambdaQueryWrapper<HomeReport> wrapper = new LambdaQueryWrapper<>();
+        if (followStatus != null) wrapper.eq(HomeReport::getFollowStatus, followStatus);
+        if (studentId != null) wrapper.eq(HomeReport::getStudentId, studentId);
+        wrapper.orderByDesc(HomeReport::getReportDate);
+        return ApiResponse.ok(homeReportMapper.selectPage(Page.of(pageNo, pageSize), wrapper));
     }
 
     @PostMapping
@@ -44,8 +52,8 @@ public class HomeReportController {
         HomeReport report = new HomeReport();
         report.setTenantId(1L);
         report.setStudentId(request.studentId());
-        report.setParentUserId(request.parentUserId());
-        report.setReportDate(request.reportDate());
+        report.setParentUserId(StpUtil.getLoginIdAsLong());
+        report.setReportDate(request.reportDate() != null ? request.reportDate() : LocalDate.now());
         report.setSleepStatus(request.sleepStatus());
         report.setEmotionStatus(request.emotionStatus());
         report.setStudyStatus(request.studyStatus());
@@ -56,15 +64,42 @@ public class HomeReportController {
         return ApiResponse.ok(report.getId());
     }
 
+    @PutMapping("/{id}/follow")
+    @AuditLog(module = BusinessModuleEnum.FS, action = "FOLLOW_HOME_REPORT", resourceType = "fs_home_report")
+    public ApiResponse<Void> follow(@PathVariable Long id, @RequestBody FollowRequest req) {
+        HomeReport report = homeReportMapper.selectById(id);
+        if (report == null) return ApiResponse.fail(404, "报备记录不存在");
+
+        report.setFollowStatus("FOLLOWED");
+        report.setFollowRemark(req.remark());
+        report.setFollowBy(StpUtil.getLoginIdAsLong());
+        report.setFollowAt(LocalDateTime.now());
+        homeReportMapper.updateById(report);
+
+        // 给家长推送站内消息
+        SysMessage msg = new SysMessage();
+        msg.setTenantId(1L);
+        msg.setReceiverId(report.getParentUserId());
+        msg.setSenderId(StpUtil.getLoginIdAsLong());
+        msg.setTitle("老师已跟进您的居家报备");
+        msg.setContent(req.remark() != null && !req.remark().isBlank()
+                ? "老师回复：" + req.remark()
+                : "老师已查看并跟进您" + report.getReportDate() + "的居家报备。");
+        msg.setBizType("HOME_REPORT_REPLY");
+        msg.setBizId(id);
+        messageMapper.insert(msg);
+
+        return ApiResponse.ok(null);
+    }
+
     public record CreateHomeReportRequest(
             @NotNull Long studentId,
-            @NotNull Long parentUserId,
-            @NotNull LocalDate reportDate,
+            LocalDate reportDate,
             String sleepStatus,
             String emotionStatus,
             String studyStatus,
             String familySpecialSituation,
-            String outgoingReport
-    ) {
-    }
+            String outgoingReport) {}
+
+    public record FollowRequest(String remark) {}
 }

@@ -1,6 +1,6 @@
 /**
  * 模块: PC 后台
- * 功能: 路由配置，按业务板块分组
+ * 功能: 路由配置，按业务板块分组 + 登录守卫
  * 创建: 2026-06
  * 作者: 云辰盾项目组
  */
@@ -10,6 +10,12 @@ import AdminLayout from '../layouts/AdminLayout.vue';
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/login/LoginPage.vue'),
+    meta: { public: true }
+  },
+  {
     path: '/',
     component: AdminLayout,
     redirect: '/dashboard',
@@ -18,6 +24,7 @@ const routes = [
       { path: 'family-school/home-reports', name: 'HomeReports', component: () => import('../views/family-school/HomeReports.vue') },
       { path: 'student/students', name: 'Students', component: () => import('../views/student/StudentList.vue') },
       { path: 'workflow/instances', name: 'WorkflowInstances', component: () => import('../views/workflow/WorkflowInstances.vue') },
+      { path: 'sys/users', name: 'SysUsers', component: () => import('../views/system/UserManagement.vue') },
       { path: 'academic/subjects', name: 'AcademicSubjects', component: () => import('../views/academic/SubjectList.vue') },
       { path: 'academic/classes', name: 'AcademicClasses', component: () => import('../views/academic/ClassList.vue') },
       { path: 'academic/scores', name: 'AcademicScores', component: () => import('../views/academic/ScoreList.vue') },
@@ -31,10 +38,24 @@ const routes = [
       { path: 'psychology-safety', name: 'PsychologyPlaceholder', component: () => import('../views/placeholders/PsychologyPlaceholder.vue') },
       { path: 'enrollment', name: 'EnrollmentPlaceholder', component: () => import('../views/placeholders/EnrollmentPlaceholder.vue') }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/dashboard' }
 ];
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes
 });
+
+// 导航守卫：未登录跳转登录页
+router.beforeEach((to) => {
+  const token = localStorage.getItem('ycd_token');
+  if (!to.meta.public && !token) {
+    return { path: '/login', query: { redirect: to.fullPath } };
+  }
+  if (to.path === '/login' && token) {
+    return { path: '/dashboard' };
+  }
+});
+
+export default router;
