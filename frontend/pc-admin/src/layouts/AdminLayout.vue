@@ -9,7 +9,15 @@
         <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon>数据总览</el-menu-item>
         <el-menu-item index="/family-school/home-reports"><el-icon><ChatDotRound /></el-icon>家校互通</el-menu-item>
         <el-menu-item index="/student/students"><el-icon><User /></el-icon>学生档案</el-menu-item>
-        <el-menu-item index="/academic"><el-icon><Reading /></el-icon>教务管理</el-menu-item>
+        <el-sub-menu index="/academic">
+          <template #title><el-icon><Reading /></el-icon>教务管理</template>
+          <el-menu-item index="/academic/subjects">学科管理</el-menu-item>
+          <el-menu-item index="/academic/classes">班级管理</el-menu-item>
+          <el-menu-item index="/academic/scores">成绩管理</el-menu-item>
+          <el-menu-item index="/academic/homeworks">作业管理</el-menu-item>
+          <el-menu-item index="/academic/teaching-progress">教学进度</el-menu-item>
+          <el-menu-item index="/academic/student-honors">学生评优</el-menu-item>
+        </el-sub-menu>
         <el-menu-item index="/hr"><el-icon><Briefcase /></el-icon>人事薪资</el-menu-item>
         <el-menu-item index="/finance"><el-icon><Money /></el-icon>财务收费</el-menu-item>
         <el-menu-item index="/insurance"><el-icon><FirstAidKit /></el-icon>保险服务</el-menu-item>

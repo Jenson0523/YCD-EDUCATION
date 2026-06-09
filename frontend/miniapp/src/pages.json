@@ -11,6 +11,18 @@
       "style": {
         "navigationBarTitleText": "居家状态报备"
       }
+    },
+    {
+      "path": "pages/academic/scores",
+      "style": {
+        "navigationBarTitleText": "我的成绩"
+      }
+    },
+    {
+      "path": "pages/academic/homeworks",
+      "style": {
+        "navigationBarTitleText": "作业列表"
+      }
     }
   ],
   "globalStyle": {

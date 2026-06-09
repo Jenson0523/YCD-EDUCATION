@@ -9,9 +9,13 @@
         <text class="entry-title">居家报备</text>
         <text class="entry-desc">作息、情绪、学习、外出</text>
       </view>
-      <view class="entry">
-        <text class="entry-title">在校动态</text>
-        <text class="entry-desc">考勤、课堂、作业、成绩</text>
+      <view class="entry" @click="goScores">
+        <text class="entry-title">成绩查询</text>
+        <text class="entry-desc">各科成绩、排名查看</text>
+      </view>
+      <view class="entry" @click="goHomeworks">
+        <text class="entry-title">作业列表</text>
+        <text class="entry-desc">当前作业与截止日期</text>
       </view>
       <view class="entry">
         <text class="entry-title">审批待办</text>
@@ -28,6 +32,12 @@
 <script setup>
 function goHomeReport() {
   uni.navigateTo({ url: '/pages/home-report/home-report' });
+}
+function goScores() {
+  uni.navigateTo({ url: '/pages/academic/scores' });
+}
+function goHomeworks() {
+  uni.navigateTo({ url: '/pages/academic/homeworks' });
 }
 </script>
 
