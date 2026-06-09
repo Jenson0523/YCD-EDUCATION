@@ -1,6 +1,14 @@
 {
   "pages": [
     {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationBarBackgroundColor": "#1B5EA6",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/index/index",
       "style": {
         "navigationBarTitleText": "云辰盾"
@@ -10,6 +18,12 @@
       "path": "pages/home-report/home-report",
       "style": {
         "navigationBarTitleText": "居家状态报备"
+      }
+    },
+    {
+      "path": "pages/my-reports/my-reports",
+      "style": {
+        "navigationBarTitleText": "我的报备记录"
       }
     },
     {

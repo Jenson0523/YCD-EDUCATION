@@ -7,6 +7,7 @@
 
 import { http } from './http';
 
-export function fetchHomeReports(params) {
-  return http.get('/fs/home-reports', { params });
-}
+export const fetchHomeReports = (params) => http.get('/fs/home-reports', { params });
+
+export const followHomeReport = (id, remark) =>
+  http.put(`/fs/home-reports/${id}/follow`, { remark });

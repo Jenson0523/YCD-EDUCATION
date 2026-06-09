@@ -2,6 +2,10 @@
 export default {
   onLaunch() {
     console.log('云辰盾小程序启动');
+    const token = uni.getStorageSync('ycd_token');
+    if (!token) {
+      uni.reLaunch({ url: '/pages/login/login' });
+    }
   }
 };
 </script>
