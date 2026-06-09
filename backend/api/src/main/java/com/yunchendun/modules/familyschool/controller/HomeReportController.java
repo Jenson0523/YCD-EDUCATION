@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
 import com.yunchendun.common.enums.BusinessModuleEnum;
+import com.yunchendun.common.security.DataPermission;
+import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.familyschool.domain.HomeReport;
 import com.yunchendun.modules.familyschool.mapper.HomeReportMapper;
 import com.yunchendun.system.audit.AuditLog;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 模块: 家校共同体
@@ -32,6 +35,7 @@ public class HomeReportController {
 
     private final HomeReportMapper homeReportMapper;
     private final SysMessageMapper messageMapper;
+    private final DataPermissionHelper dataPermissionHelper;
 
     @GetMapping
     public ApiResponse<IPage<HomeReport>> page(
@@ -42,6 +46,20 @@ public class HomeReportController {
         LambdaQueryWrapper<HomeReport> wrapper = new LambdaQueryWrapper<>();
         if (followStatus != null) wrapper.eq(HomeReport::getFollowStatus, followStatus);
         if (studentId != null) wrapper.eq(HomeReport::getStudentId, studentId);
+
+        // 数据权限过滤
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isSelf()) {
+            if (dp.hasNoStudent()) return ApiResponse.ok(Page.of(pageNo, pageSize));
+            wrapper.in(HomeReport::getStudentId, dp.getStudentIds());
+        } else if (dp.isClass()) {
+            if (dp.hasNoClass()) return ApiResponse.ok(Page.of(pageNo, pageSize));
+            List<Long> sids = dataPermissionHelper.studentIdsByClasses(dp.getClassIds());
+            if (sids.isEmpty()) return ApiResponse.ok(Page.of(pageNo, pageSize));
+            wrapper.in(HomeReport::getStudentId, sids);
+        }
+        // ALL：全部可见（GATE 门卫不涉及居家报备）
+
         wrapper.orderByDesc(HomeReport::getReportDate);
         return ApiResponse.ok(homeReportMapper.selectPage(Page.of(pageNo, pageSize), wrapper));
     }

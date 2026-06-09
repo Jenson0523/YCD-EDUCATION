@@ -30,7 +30,11 @@
           <el-menu-item index="/leave/ledger">请假台账</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/workflow/instances"><el-icon><Finished /></el-icon>审批中心</el-menu-item>
-        <el-menu-item index="/sys/users"><el-icon><Setting /></el-icon>系统管理</el-menu-item>
+        <el-sub-menu index="/sys">
+          <template #title><el-icon><Setting /></el-icon>系统管理</template>
+          <el-menu-item index="/sys/users">用户管理</el-menu-item>
+          <el-menu-item index="/permission/bind">数据权限绑定</el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 

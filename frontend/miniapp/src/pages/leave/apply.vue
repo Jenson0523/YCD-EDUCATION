@@ -1,10 +1,27 @@
 <template>
   <view class="page">
     <view class="info-bar">
-      <text class="info-text">📋 {{ studentName }} · 请假申请</text>
+      <text class="info-text">📋 请假申请</text>
     </view>
 
     <view class="section">
+      <!-- 选择孩子 -->
+      <view class="field-group">
+        <view class="field-label">为谁请假 <text class="required">*</text></view>
+        <view v-if="children.length === 0" class="no-child">
+          暂无关联学生，请联系学校管理员绑定
+        </view>
+        <view v-else class="options-row">
+          <view
+            v-for="c in children"
+            :key="c.studentId"
+            class="opt-chip"
+            :class="{ active: form.studentId === c.studentId }"
+            @click="pickChild(c)"
+          >{{ c.studentName }}</view>
+        </view>
+      </view>
+
       <!-- 请假类型 -->
       <view class="field-group">
         <view class="field-label">请假类型</view>
@@ -56,26 +73,41 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, onMounted } from 'vue';
 import { request } from '../../api/request';
 
-const studentName = uni.getStorageSync('ycd_realName') || '学生';
-const studentNo = uni.getStorageSync('ycd_studentNo') || '';
-const classId = uni.getStorageSync('ycd_classId') || null;
-const className = uni.getStorageSync('ycd_className') || '';
-
+const roleCode = uni.getStorageSync('ycd_roleCode') || 'PARENT';
+const children = ref([]);
 const loading = ref(false);
 const form = reactive({
+  studentId: null,
+  studentName: '',
+  studentNo: '',
+  classId: null,
+  className: '',
   leaveType: 'SICK',
   reason: '',
   leaveStart: '',
   leaveEnd: '',
   proofPhotoUrl: '',
-  studentName,
-  studentNo,
-  classId,
-  className,
-  applicantRole: 'PARENT'
+  applicantRole: roleCode === 'TEACHER' || roleCode === 'HEAD_TEACHER' ? 'TEACHER' : 'PARENT'
+});
+
+const pickChild = (c) => {
+  form.studentId = c.studentId;
+  form.studentName = c.studentName;
+  form.studentNo = c.studentNo;
+};
+
+onMounted(async () => {
+  try {
+    const list = await request({ url: '/permission/my-students' }) || [];
+    children.value = list;
+    // 只有一个孩子时自动选中
+    if (list.length === 1) pickChild(list[0]);
+  } catch (e) {
+    uni.showToast({ title: e.message || '加载关联学生失败', icon: 'none' });
+  }
 });
 
 const choosePhoto = () => {
@@ -92,6 +124,7 @@ const choosePhoto = () => {
 };
 
 const submit = async () => {
+  if (!form.studentId) { uni.showToast({ title: '请选择请假学生', icon: 'none' }); return; }
   if (!form.reason.trim()) { uni.showToast({ title: '请填写请假原因', icon: 'none' }); return; }
   if (!form.leaveStart) { uni.showToast({ title: '请选择离校时间', icon: 'none' }); return; }
   if (!form.leaveEnd) { uni.showToast({ title: '请选择返校时间', icon: 'none' }); return; }
@@ -119,6 +152,7 @@ const submit = async () => {
 .options-row { display: flex; gap: 20rpx; }
 .opt-chip { padding: 12rpx 32rpx; background: #f3f4f6; border: 1rpx solid #e5e7eb; border-radius: 50rpx; font-size: 26rpx; color: #6b7280; }
 .opt-chip.active { background: #1b5ea6; border-color: #1b5ea6; color: #fff; }
+.no-child { padding: 20rpx; background: #fef3c7; border-radius: 10rpx; font-size: 24rpx; color: #d97706; }
 .textarea { width: 100%; min-height: 140rpx; padding: 16rpx 20rpx; background: #f9fafb; border: 1rpx solid #d1d5db; border-radius: 12rpx; font-size: 28rpx; box-sizing: border-box; }
 .date-picker { padding: 20rpx 24rpx; background: #f9fafb; border: 1rpx solid #d1d5db; border-radius: 12rpx; font-size: 28rpx; color: #374151; }
 .photo-area { width: 160rpx; height: 160rpx; border: 2rpx dashed #d1d5db; border-radius: 12rpx; overflow: hidden; }

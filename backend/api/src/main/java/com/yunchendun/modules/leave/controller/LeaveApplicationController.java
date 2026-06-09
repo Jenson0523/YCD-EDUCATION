@@ -4,6 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
+import com.yunchendun.common.security.DataPermission;
+import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.leave.domain.LeaveApplication;
 import com.yunchendun.modules.leave.domain.TempSupplementOrder;
 import com.yunchendun.modules.leave.mapper.LeaveApplicationMapper;
@@ -36,6 +38,7 @@ public class LeaveApplicationController {
     private final LeaveApplicationMapper leaveMapper;
     private final TempSupplementOrderMapper supplementMapper;
     private final SysMessageMapper messageMapper;
+    private final DataPermissionHelper dataPermissionHelper;
 
     private static final AtomicLong SEQ = new AtomicLong(System.currentTimeMillis() % 10000);
 
@@ -62,7 +65,21 @@ public class LeaveApplicationController {
                 .eq(classId != null, LeaveApplication::getClassId, classId)
                 .like(StringUtils.hasText(keyword), LeaveApplication::getStudentName, keyword)
                 .orderByDesc(LeaveApplication::getCreatedAt);
-        // 家长/老师只看自己发起的
+
+        // 数据权限过滤
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isClass()) {
+            // 班主任/任课老师：仅本人关联班级
+            if (dp.hasNoClass()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            w.in(LeaveApplication::getClassId, dp.getClassIds());
+        } else if (dp.isSelf()) {
+            // 家长/学生：仅本人关联学生
+            if (dp.hasNoStudent()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            w.in(LeaveApplication::getStudentId, dp.getStudentIds());
+        }
+        // ALL / GATE_VALID：不额外限制（门卫核验需看全校请假）
+
+        // 额外：role=my 仅看本人发起的
         if ("my".equals(role)) {
             w.eq(LeaveApplication::getApplicantId, uid);
         }

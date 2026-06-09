@@ -4,6 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
+import com.yunchendun.common.security.DataPermission;
+import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.leave.domain.GateVerification;
 import com.yunchendun.modules.leave.domain.LeaveApplication;
 import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +38,7 @@ public class GateVerificationController {
     private final GateVerificationMapper verifyMapper;
     private final LeaveApplicationMapper leaveMapper;
     private final SysMessageMapper messageMapper;
+    private final DataPermissionHelper dataPermissionHelper;
 
     /**
      * 执行人脸核验离校
@@ -146,6 +150,7 @@ public class GateVerificationController {
                 .ge(GateVerification::getVerifiedAt, startOfDay)
                 .eq(StringUtils.hasText(result), GateVerification::getResult, result)
                 .orderByDesc(GateVerification::getVerifiedAt);
+        if (!applyGateScope(w)) return ApiResponse.ok(Collections.emptyList());
         return ApiResponse.ok(verifyMapper.selectList(w));
     }
 
@@ -163,6 +168,26 @@ public class GateVerificationController {
                 .eq(StringUtils.hasText(result), GateVerification::getResult, result)
                 .like(StringUtils.hasText(keyword), GateVerification::getStudentName, keyword)
                 .orderByDesc(GateVerification::getVerifiedAt);
+        if (!applyGateScope(w)) return ApiResponse.ok(new Page<>(pageNo, pageSize));
         return ApiResponse.ok(verifyMapper.selectPage(new Page<>(pageNo, pageSize), w));
+    }
+
+    /**
+     * 对核验记录应用数据权限。
+     * @return false 表示当前用户无任何可见数据（调用方应直接返回空）
+     */
+    private boolean applyGateScope(LambdaQueryWrapper<GateVerification> w) {
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isClass()) {
+            if (dp.hasNoClass()) return false;
+            List<Long> sids = dataPermissionHelper.studentIdsByClasses(dp.getClassIds());
+            if (sids.isEmpty()) return false;
+            w.in(GateVerification::getStudentId, sids);
+        } else if (dp.isSelf()) {
+            if (dp.hasNoStudent()) return false;
+            w.in(GateVerification::getStudentId, dp.getStudentIds());
+        }
+        // ALL / GATE_VALID：全校可见
+        return true;
     }
 }

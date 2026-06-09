@@ -4,6 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
+import com.yunchendun.common.security.DataPermission;
+import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.leave.domain.FaceRecord;
 import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +27,7 @@ import java.util.Map;
 public class FaceRecordController {
 
     private final FaceRecordMapper faceRecordMapper;
+    private final DataPermissionHelper dataPermissionHelper;
 
     /** 分页查询人脸档案（后台管理） */
     @Operation(summary = "人脸档案列表")
@@ -35,11 +38,22 @@ public class FaceRecordController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status) {
         LambdaQueryWrapper<FaceRecord> wrapper = new LambdaQueryWrapper<FaceRecord>()
-                .like(StringUtils.hasText(keyword), FaceRecord::getRealName, keyword)
-                .or(StringUtils.hasText(keyword),
-                        w -> w.like(FaceRecord::getStudentNo, keyword))
+                .and(StringUtils.hasText(keyword), q -> q
+                        .like(FaceRecord::getRealName, keyword)
+                        .or().like(FaceRecord::getStudentNo, keyword))
                 .eq(StringUtils.hasText(status), FaceRecord::getStatus, status)
                 .orderByDesc(FaceRecord::getCreatedAt);
+
+        // 数据权限过滤
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isClass()) {
+            if (dp.hasNoClass()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            wrapper.in(FaceRecord::getClassId, dp.getClassIds());
+        } else if (dp.isSelf()) {
+            if (dp.hasNoStudent()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            wrapper.in(FaceRecord::getStudentId, dp.getStudentIds());
+        }
+        // ALL / GATE_VALID：全部可见
         return ApiResponse.ok(faceRecordMapper.selectPage(new Page<>(pageNo, pageSize), wrapper));
     }
 

@@ -33,6 +33,7 @@ const routes = [
       { path: 'academic/student-honors', name: 'StudentHonors', component: () => import('../views/academic/StudentHonorList.vue') },
       { path: 'leave/face', name: 'FaceManagement', component: () => import('../views/leave/FaceManagement.vue') },
       { path: 'leave/ledger', name: 'LeaveLedger', component: () => import('../views/leave/LeaveLedger.vue') },
+      { path: 'permission/bind', name: 'BindManagement', component: () => import('../views/permission/BindManagement.vue') },
       { path: 'hr', name: 'HrPlaceholder', component: () => import('../views/placeholders/HrPlaceholder.vue') },
       { path: 'finance', name: 'FinancePlaceholder', component: () => import('../views/placeholders/FinancePlaceholder.vue') },
       { path: 'insurance', name: 'InsurancePlaceholder', component: () => import('../views/placeholders/InsurancePlaceholder.vue') },

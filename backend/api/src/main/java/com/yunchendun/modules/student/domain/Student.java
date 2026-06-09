@@ -23,6 +23,8 @@ public class Student extends BaseEntity {
     private LocalDate birthday;
     private String gradeName;
     private String className;
+    private Long classId;
+    private Long faceRecordId;
     private String status;
     private String tags;
     private String guardianName;
