@@ -97,6 +97,7 @@ const roles = [
   { value: 'FINANCE', label: '财务专员' },
   { value: 'HEAD_TEACHER', label: '班主任' },
   { value: 'TEACHER', label: '科任教师' },
+  { value: 'GATE', label: '门卫' },
   { value: 'PARENT', label: '家长' },
   { value: 'STUDENT', label: '学生' },
 ];

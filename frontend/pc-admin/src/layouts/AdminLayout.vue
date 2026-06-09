@@ -25,7 +25,7 @@
         <el-menu-item index="/psychology-safety"><el-icon><Warning /></el-icon>心理安全</el-menu-item>
         <el-menu-item index="/enrollment"><el-icon><Promotion /></el-icon>招生升学</el-menu-item>
         <el-sub-menu index="/leave">
-          <template #title><el-icon><Tickets /></el-icon>请假离校</template>
+          <template #title><el-icon><Ticket /></el-icon>请假离校</template>
           <el-menu-item index="/leave/face">人脸档案管理</el-menu-item>
           <el-menu-item index="/leave/ledger">请假台账</el-menu-item>
         </el-sub-menu>
@@ -87,7 +87,7 @@ import { ElMessageBox } from 'element-plus';
 import {
   ArrowDown, Bell, Briefcase, ChatDotRound, DataBoard,
   Finished, FirstAidKit, Money, Promotion, Reading,
-  Setting, Tickets, User, Van, Warning
+  Setting, Ticket, User, Van, Warning
 } from '@element-plus/icons-vue';
 import { useAuthStore } from '../stores/auth';
 import { fetchUnreadCount, fetchMessages, markMessageRead, markAllRead } from '../api/auth';
