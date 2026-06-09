@@ -1,7 +1,11 @@
 <template>
   <view class="page">
-    <view class="info-bar">
-      <text class="info-text">📋 请假申请</text>
+    <view class="hero">
+      <view class="hero-decor"></view>
+      <view class="hero-content">
+        <text class="hero-title">学生请假申请</text>
+        <text class="hero-sub">在线提交 · 班主任审批 · 门卫核验放行</text>
+      </view>
     </view>
 
     <view class="section">
@@ -142,16 +146,27 @@ const submit = async () => {
 </script>
 
 <style scoped>
-.info-bar { background: #1b5ea6; padding: 20rpx 32rpx; }
-.info-text { font-size: 24rpx; color: rgba(255,255,255,0.85); }
-.section { padding: 24rpx 32rpx; }
+.page { background: #eef2f9; min-height: 100vh; }
+.hero {
+  position: relative; overflow: hidden;
+  background: linear-gradient(150deg, #0b2a6b 0%, #1746b5 60%, #2b6cff 100%);
+  padding: 60rpx 40rpx 70rpx; border-radius: 0 0 36rpx 36rpx;
+}
+.hero-decor { position: absolute; width: 340rpx; height: 340rpx; border-radius: 50%;
+  background: rgba(21,200,224,0.25); filter: blur(40rpx); top: -100rpx; right: -80rpx; }
+.hero-content { position: relative; }
+.hero-title { display: block; font-size: 38rpx; font-weight: 800; color: #fff; }
+.hero-sub { display: block; margin-top: 10rpx; font-size: 22rpx; color: rgba(255,255,255,0.65); }
+.section { padding: 24rpx 32rpx; margin: -36rpx 24rpx 0; background: #fff;
+  border-radius: 24rpx; box-shadow: 0 10rpx 30rpx rgba(15,40,100,0.07); position: relative; }
 .field-group { margin-bottom: 32rpx; }
 .field-label { font-size: 28rpx; font-weight: 600; color: #374151; margin-bottom: 14rpx; }
 .required { color: #ef4444; }
 .optional { font-size: 22rpx; color: #9ca3af; font-weight: 400; }
 .options-row { display: flex; gap: 20rpx; }
 .opt-chip { padding: 12rpx 32rpx; background: #f3f4f6; border: 1rpx solid #e5e7eb; border-radius: 50rpx; font-size: 26rpx; color: #6b7280; }
-.opt-chip.active { background: #1b5ea6; border-color: #1b5ea6; color: #fff; }
+.opt-chip.active { background: linear-gradient(135deg,#2b6cff,#15c8e0); border-color: transparent; color: #fff;
+  box-shadow: 0 6rpx 16rpx rgba(43,108,255,0.3); }
 .no-child { padding: 20rpx; background: #fef3c7; border-radius: 10rpx; font-size: 24rpx; color: #d97706; }
 .textarea { width: 100%; min-height: 140rpx; padding: 16rpx 20rpx; background: #f9fafb; border: 1rpx solid #d1d5db; border-radius: 12rpx; font-size: 28rpx; box-sizing: border-box; }
 .date-picker { padding: 20rpx 24rpx; background: #f9fafb; border: 1rpx solid #d1d5db; border-radius: 12rpx; font-size: 28rpx; color: #374151; }
@@ -160,6 +175,9 @@ const submit = async () => {
 .photo-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
 .add-icon { font-size: 48rpx; color: #9ca3af; }
 .add-tip { font-size: 22rpx; color: #9ca3af; }
-.submit-btn { width: 100%; height: 92rpx; background: #1b5ea6; color: #fff; font-size: 32rpx; font-weight: 600; border-radius: 12rpx; border: none; margin-top: 16rpx; }
-.submit-btn[disabled] { opacity: 0.55; }
+.submit-btn { width: 100%; height: 92rpx; background: linear-gradient(135deg,#2b6cff,#15c8e0); color: #fff;
+  font-size: 32rpx; font-weight: 700; border-radius: 18rpx; border: none; margin-top: 16rpx;
+  box-shadow: 0 12rpx 30rpx rgba(43,108,255,0.32); }
+.submit-btn[disabled] { opacity: 0.55; box-shadow: none; }
+.submit-btn::after { border: none; }
 </style>
