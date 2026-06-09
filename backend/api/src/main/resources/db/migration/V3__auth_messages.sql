@@ -3,17 +3,17 @@
 -- 创建: 2026-06
 -- 作者: 云辰盾项目组
 
--- 补全 sys_user 字段（已有表，用 ALTER 追加缺失列）
+-- 补全 sys_user 字段（V1/V2 未包含，直接追加）
 ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS role_code VARCHAR(64) NOT NULL DEFAULT 'TEACHER' COMMENT '快速角色标识',
-    ADD COLUMN IF NOT EXISTS avatar VARCHAR(255) NULL,
-    ADD COLUMN IF NOT EXISTS class_id BIGINT NULL COMMENT '班主任/教师关联班级';
+    ADD COLUMN role_code VARCHAR(64) NOT NULL DEFAULT 'TEACHER' COMMENT '快速角色标识',
+    ADD COLUMN avatar VARCHAR(255) NULL,
+    ADD COLUMN class_id BIGINT NULL COMMENT '班主任/教师关联班级';
 
 -- 家校报备补充跟进字段
 ALTER TABLE fs_home_report
-    ADD COLUMN IF NOT EXISTS follow_remark VARCHAR(500) NULL COMMENT '跟进备注',
-    ADD COLUMN IF NOT EXISTS follow_by BIGINT NULL COMMENT '跟进人ID',
-    ADD COLUMN IF NOT EXISTS follow_at DATETIME NULL COMMENT '跟进时间';
+    ADD COLUMN follow_remark VARCHAR(500) NULL COMMENT '跟进备注',
+    ADD COLUMN follow_by BIGINT NULL COMMENT '跟进人ID',
+    ADD COLUMN follow_at DATETIME NULL COMMENT '跟进时间';
 
 -- 站内消息表
 CREATE TABLE IF NOT EXISTS sys_message (

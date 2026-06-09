@@ -1,5 +1,6 @@
 package com.yunchendun.common.config;
 
+import cn.dev33.satoken.exception.NotWebContextException;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import org.apache.ibatis.reflection.MetaObject;
@@ -16,10 +17,19 @@ import java.time.LocalDateTime;
 @Component
 public class MybatisMetaObjectHandler implements MetaObjectHandler {
 
+    /** 安全获取当前登录用户ID，非Web上下文（如启动初始化）返回0 */
+    private Long currentUserId() {
+        try {
+            return StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : 0L;
+        } catch (NotWebContextException e) {
+            return 0L;
+        }
+    }
+
     @Override
     public void insertFill(MetaObject metaObject) {
         LocalDateTime now = LocalDateTime.now();
-        Long userId = StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : 0L;
+        Long userId = currentUserId();
         strictInsertFill(metaObject, "createdAt", LocalDateTime.class, now);
         strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
         strictInsertFill(metaObject, "createdBy", Long.class, userId);
@@ -28,7 +38,7 @@ public class MybatisMetaObjectHandler implements MetaObjectHandler {
 
     @Override
     public void updateFill(MetaObject metaObject) {
-        Long userId = StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : 0L;
+        Long userId = currentUserId();
         strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
         strictUpdateFill(metaObject, "updatedBy", Long.class, userId);
     }
