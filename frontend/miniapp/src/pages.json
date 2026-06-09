@@ -10,33 +10,47 @@
     },
     {
       "path": "pages/index/index",
-      "style": {
-        "navigationBarTitleText": "云辰盾"
-      }
+      "style": { "navigationBarTitleText": "云辰盾" }
     },
     {
       "path": "pages/home-report/home-report",
-      "style": {
-        "navigationBarTitleText": "居家状态报备"
-      }
+      "style": { "navigationBarTitleText": "居家状态报备" }
     },
     {
       "path": "pages/my-reports/my-reports",
-      "style": {
-        "navigationBarTitleText": "我的报备记录"
-      }
+      "style": { "navigationBarTitleText": "我的报备记录" }
+    },
+    {
+      "path": "pages/leave/apply",
+      "style": { "navigationBarTitleText": "申请请假" }
+    },
+    {
+      "path": "pages/leave/my-leaves",
+      "style": { "navigationBarTitleText": "我的请假" }
+    },
+    {
+      "path": "pages/leave/approve",
+      "style": { "navigationBarTitleText": "请假审批" }
+    },
+    {
+      "path": "pages/gate/verify",
+      "style": { "navigationBarTitleText": "人脸核验" }
+    },
+    {
+      "path": "pages/gate/today-leaves",
+      "style": { "navigationBarTitleText": "今日有效假条" }
+    },
+    {
+      "path": "pages/gate/temp-depart",
+      "style": { "navigationBarTitleText": "临时紧急放行" }
     },
     {
       "path": "pages/academic/scores",
-      "style": {
-        "navigationBarTitleText": "我的成绩"
-      }
+      "style": { "navigationBarTitleText": "我的成绩" }
     },
     {
       "path": "pages/academic/homeworks",
-      "style": {
-        "navigationBarTitleText": "作业列表"
-      }
+      "style": { "navigationBarTitleText": "作业列表" }
     }
   ],
   "globalStyle": {

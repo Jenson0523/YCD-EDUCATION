@@ -42,7 +42,7 @@ public class SysMessageController {
         Long userId = StpUtil.getLoginIdAsLong();
         long count = messageMapper.selectCount(new LambdaQueryWrapper<SysMessage>()
                 .eq(SysMessage::getReceiverId, userId)
-                .eq(SysMessage::getIsRead, false));
+                .eq(SysMessage::getIsRead, 0));
         return ApiResponse.ok(Map.of("count", count));
     }
 
@@ -50,7 +50,7 @@ public class SysMessageController {
     public ApiResponse<Void> markRead(@PathVariable Long id) {
         SysMessage msg = new SysMessage();
         msg.setId(id);
-        msg.setIsRead(true);
+        msg.setIsRead(1);
         messageMapper.updateById(msg);
         return ApiResponse.ok(null);
     }
@@ -59,10 +59,10 @@ public class SysMessageController {
     public ApiResponse<Void> readAll() {
         Long userId = StpUtil.getLoginIdAsLong();
         SysMessage update = new SysMessage();
-        update.setIsRead(true);
+        update.setIsRead(1);
         messageMapper.update(update, new LambdaQueryWrapper<SysMessage>()
                 .eq(SysMessage::getReceiverId, userId)
-                .eq(SysMessage::getIsRead, false));
+                .eq(SysMessage::getIsRead, 0));
         return ApiResponse.ok(null);
     }
 }

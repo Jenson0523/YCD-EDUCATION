@@ -27,6 +27,6 @@ public class SysMessage {
     private String content;
     private String bizType;
     private Long bizId;
-    private Boolean isRead;
+    private Integer isRead; // 0=未读 1=已读
     private LocalDateTime createdAt;
 }
