@@ -15,6 +15,12 @@
         <el-input v-model="tcKeyword" placeholder="教师姓名" clearable style="width:180px" @keyup.enter="loadTC" />
         <el-button type="primary" @click="loadTC">查询</el-button>
         <el-button type="success" @click="openTcDialog">+ 新增绑定</el-button>
+        <el-divider direction="vertical" />
+        <el-button @click="downloadTemplate('teacher-class')">下载模板</el-button>
+        <el-upload :show-file-list="false" :auto-upload="true" accept=".xlsx,.xls"
+                   :http-request="(o) => doImport('teacher-class', o)">
+          <el-button type="warning">Excel 导入</el-button>
+        </el-upload>
       </div>
       <el-table :data="tcRows" border stripe>
         <el-table-column prop="teacherName" label="教师" width="120" />
@@ -45,6 +51,12 @@
         <el-input v-model="psKeyword" placeholder="家长/学生姓名" clearable style="width:180px" @keyup.enter="loadPS" />
         <el-button type="primary" @click="loadPS">查询</el-button>
         <el-button type="success" @click="openPsDialog">+ 新增绑定</el-button>
+        <el-divider direction="vertical" />
+        <el-button @click="downloadTemplate('parent-student')">下载模板（支持多孩）</el-button>
+        <el-upload :show-file-list="false" :auto-upload="true" accept=".xlsx,.xls"
+                   :http-request="(o) => doImport('parent-student', o)">
+          <el-button type="warning">Excel 导入</el-button>
+        </el-upload>
       </div>
       <el-table :data="psRows" border stripe>
         <el-table-column prop="parentName" label="家长" width="120" />
@@ -157,7 +169,7 @@ const teachers = ref([]); const parents = ref([]); const classes = ref([]); cons
 const loadOptions = async () => {
   const [uData, cData, sData] = await Promise.all([
     http.get('/sys/users', { params: { pageNo: 1, pageSize: 200 } }),
-    http.get('/academic/classes', { params: { pageNo: 1, pageSize: 200 } }).catch(() => ({ records: [] })),
+    http.get('/edu/classes', { params: { pageNo: 1, pageSize: 200 } }).catch(() => ({ records: [] })),
     http.get('/stu/students', { params: { pageNo: 1, pageSize: 500 } }),
   ]);
   const users = uData?.records || [];
@@ -199,6 +211,36 @@ const unbindTC = async (id) => {
 const unbindPS = async (id) => {
   await ElMessageBox.confirm('确认解除该绑定？', '提示', { type: 'warning' });
   await http.delete(`/permission/parent-student/${id}`); ElMessage.success('已解绑'); loadPS();
+};
+
+// ===== Excel 模板下载 / 导入 =====
+const downloadTemplate = async (type) => {
+  const token = localStorage.getItem('ycd_token');
+  try {
+    const resp = await fetch(`/api/permission/${type}/template`, { headers: { Authorization: token } });
+    if (!resp.ok) { ElMessage.error('模板下载失败'); return; }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = type === 'teacher-class' ? '教师班级绑定模板.xlsx' : '家长学生绑定模板.xlsx';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch { ElMessage.error('模板下载失败'); }
+};
+
+const doImport = async (type, option) => {
+  const fd = new FormData();
+  fd.append('file', option.file);
+  try {
+    const res = await http.post(`/permission/${type}/import`, fd,
+      { headers: { 'Content-Type': 'multipart/form-data' } });
+    ElMessage.success(`导入完成：成功 ${res.success} 条，失败 ${res.failed} 条`);
+    if (res.errors && res.errors.length) {
+      ElMessageBox.alert(res.errors.join('<br/>'), '导入明细', { dangerouslyUseHTMLString: true });
+    }
+    if (type === 'teacher-class') loadTC(); else loadPS();
+  } catch { /* http 拦截器已提示 */ }
 };
 
 const roleLabel = (c) => ({ HEAD_TEACHER: '班主任', TEACHER: '科任' }[c] || c);

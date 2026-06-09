@@ -8,13 +8,17 @@ import com.yunchendun.modules.permission.domain.ParentStudent;
 import com.yunchendun.modules.permission.domain.TeacherClass;
 import com.yunchendun.modules.permission.mapper.ParentStudentMapper;
 import com.yunchendun.modules.permission.mapper.TeacherClassMapper;
+import com.yunchendun.modules.permission.service.BindImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 模块: 数据权限
@@ -28,6 +32,7 @@ public class PermissionBindController {
 
     private final TeacherClassMapper teacherClassMapper;
     private final ParentStudentMapper parentStudentMapper;
+    private final BindImportService bindImportService;
 
     // ==================== 教师-班级绑定 ====================
 
@@ -120,5 +125,31 @@ public class PermissionBindController {
         return ApiResponse.ok(teacherClassMapper.selectList(
                 new LambdaQueryWrapper<TeacherClass>()
                         .eq(TeacherClass::getTeacherUserId, uid)));
+    }
+
+    // ==================== Excel 模板下载 / 导入 ====================
+
+    @Operation(summary = "下载教师班级绑定模板")
+    @GetMapping("/teacher-class/template")
+    public void teacherClassTemplate(HttpServletResponse resp) {
+        bindImportService.downloadTeacherClassTemplate(resp);
+    }
+
+    @Operation(summary = "下载家长学生绑定模板（支持多孩）")
+    @GetMapping("/parent-student/template")
+    public void parentStudentTemplate(HttpServletResponse resp) {
+        bindImportService.downloadParentStudentTemplate(resp);
+    }
+
+    @Operation(summary = "导入教师班级绑定")
+    @PostMapping("/teacher-class/import")
+    public ApiResponse<Map<String, Object>> importTeacherClass(@RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(bindImportService.importTeacherClass(file));
+    }
+
+    @Operation(summary = "导入家长学生绑定（支持多孩）")
+    @PostMapping("/parent-student/import")
+    public ApiResponse<Map<String, Object>> importParentStudent(@RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(bindImportService.importParentStudent(file));
     }
 }
