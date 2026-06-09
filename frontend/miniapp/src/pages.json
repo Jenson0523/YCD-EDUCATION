@@ -1,0 +1,22 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "云辰盾"
+      }
+    },
+    {
+      "path": "pages/home-report/home-report",
+      "style": {
+        "navigationBarTitleText": "居家状态报备"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "云辰盾",
+    "navigationBarBackgroundColor": "#1B5EA6",
+    "backgroundColor": "#F6F8FB"
+  }
+}

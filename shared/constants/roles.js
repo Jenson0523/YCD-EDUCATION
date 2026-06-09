@@ -1,0 +1,53 @@
+/**
+ * 模块: 平台级 / shared
+ * 功能: 11 种角色常量，禁止数字硬编码
+ * 创建: 2026-06
+ * 作者: 云辰盾项目组
+ */
+
+export const ROLE = Object.freeze({
+  PRINCIPAL: 'PRINCIPAL',
+  ACADEMIC_AFFAIRS: 'ACADEMIC_AFFAIRS',
+  HR_SPECIALIST: 'HR_SPECIALIST',
+  FINANCE_SPECIALIST: 'FINANCE_SPECIALIST',
+  ENROLLMENT: 'ENROLLMENT',
+  ADMIN_LOGISTICS: 'ADMIN_LOGISTICS',
+  PSYCHOLOGY_SAFETY: 'PSYCHOLOGY_SAFETY',
+  HEAD_TEACHER: 'HEAD_TEACHER',
+  TEACHER: 'TEACHER',
+  PARENT: 'PARENT',
+  STUDENT: 'STUDENT'
+});
+
+export const ROLE_LABEL = Object.freeze({
+  [ROLE.PRINCIPAL]: '校长/股东',
+  [ROLE.ACADEMIC_AFFAIRS]: '教务处',
+  [ROLE.HR_SPECIALIST]: '人事专员',
+  [ROLE.FINANCE_SPECIALIST]: '财务专员',
+  [ROLE.ENROLLMENT]: '招生办',
+  [ROLE.ADMIN_LOGISTICS]: '行政/后勤',
+  [ROLE.PSYCHOLOGY_SAFETY]: '心理/安保/校医',
+  [ROLE.HEAD_TEACHER]: '班主任',
+  [ROLE.TEACHER]: '科任教师',
+  [ROLE.PARENT]: '家长',
+  [ROLE.STUDENT]: '学生'
+});
+
+export const ROLE_TERMINAL = Object.freeze({
+  PC: [
+    ROLE.PRINCIPAL,
+    ROLE.ACADEMIC_AFFAIRS,
+    ROLE.HR_SPECIALIST,
+    ROLE.FINANCE_SPECIALIST,
+    ROLE.ENROLLMENT,
+    ROLE.ADMIN_LOGISTICS,
+    ROLE.PSYCHOLOGY_SAFETY,
+    ROLE.HEAD_TEACHER
+  ],
+  MINIAPP: [ROLE.TEACHER, ROLE.HEAD_TEACHER, ROLE.PARENT, ROLE.STUDENT]
+});
+
+export const ROLE_OPTIONS = Object.values(ROLE).map((value) => ({
+  value,
+  label: ROLE_LABEL[value]
+}));

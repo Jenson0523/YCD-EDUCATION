@@ -1,0 +1,46 @@
+# Common
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.idea/
+.vscode/
+.claude/
+*.iml
+
+# Local analysis artifacts
+_dump_*.txt
+_extract.py
+_req.txt
+_spec.txt
+_unpack_*/
+
+# Java / Maven
+backend/**/target/
+backend/**/*.class
+backend/**/.mvn/
+backend/**/mvnw
+backend/**/mvnw.cmd
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.cache/
+*.local
+.eslintcache
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# uni-app
+frontend/miniapp/unpackage/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+application-local.yml
+application-prod.yml
+*.pem
+*.key
