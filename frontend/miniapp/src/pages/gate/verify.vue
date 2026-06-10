@@ -194,7 +194,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { request } from '../../api/request';
+import { request, assetUrl } from '../../api/request';
 
 const statusBarH = ref(20);
 onMounted(() => {
@@ -245,7 +245,7 @@ const searchStudent = async () => {
       let facePhotoUrl = '';
       try {
         const faceRec = await request({ url: `/leave/face/by-no/${studentNo.value}` });
-        if (faceRec) { hasFace = true; facePhotoUrl = faceRec.facePhotoUrl || ''; }
+        if (faceRec) { hasFace = true; facePhotoUrl = assetUrl(faceRec.facePhotoUrl); }
       } catch {}
       studentInfo.value = { ...stu, hasFace, facePhotoUrl };
     }

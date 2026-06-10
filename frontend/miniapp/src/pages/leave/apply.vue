@@ -26,28 +26,77 @@
         <view class="field-section">
           <view class="section-title">
             <view class="title-dot"></view>
-            <text class="title-text">为谁请假</text>
+            <text class="title-text">{{ isParent ? '为哪个孩子请假' : '为哪位学生请假' }}</text>
             <text class="title-req">*</text>
+            <text v-if="!isParent" class="title-mode">代请假</text>
           </view>
-          <view v-if="children.length === 0 && childrenLoaded" class="no-child">
-            <text class="no-child-icon">👶</text>
-            <text class="no-child-text">暂无关联学生，请联系管理员绑定</text>
-          </view>
-          <view v-else class="child-list">
-            <view
-              v-for="c in children"
-              :key="c.studentId"
-              class="child-chip"
-              :class="{ 'chip-active': form.studentId === c.studentId }"
-              @click="pickChild(c)"
-            >
-              <view class="chip-avatar" :class="{ 'ca-active': form.studentId === c.studentId }">
-                <text class="ca-initial">{{ c.studentName?.charAt(0) }}</text>
-              </view>
-              <text class="chip-name">{{ c.studentName }}</text>
-              <view v-if="form.studentId === c.studentId" class="chip-check">✓</view>
+
+          <!-- 家长/学生：仅可选已绑定孩子 -->
+          <template v-if="isParent">
+            <view v-if="children.length === 0 && childrenLoaded" class="no-child">
+              <text class="no-child-icon">👶</text>
+              <text class="no-child-text">暂无关联孩子，请联系管理员绑定</text>
             </view>
-          </view>
+            <view v-else class="child-list">
+              <view
+                v-for="c in children"
+                :key="c.studentId"
+                class="child-chip"
+                :class="{ 'chip-active': form.studentId === c.studentId }"
+                @click="pickChild(c)"
+              >
+                <view class="chip-avatar" :class="{ 'ca-active': form.studentId === c.studentId }">
+                  <text class="ca-initial">{{ c.studentName?.charAt(0) }}</text>
+                </view>
+                <text class="chip-name">{{ c.studentName }}</text>
+                <view v-if="form.studentId === c.studentId" class="chip-check">✓</view>
+              </view>
+            </view>
+          </template>
+
+          <!-- 教师/管理员：可搜索选择学生（代请假） -->
+          <template v-else>
+            <!-- 已选学生展示 -->
+            <view v-if="form.studentId" class="picked-student" @click="clearPicked">
+              <view class="ps-avatar"><text class="ps-initial">{{ form.studentName?.charAt(0) }}</text></view>
+              <view class="ps-info">
+                <text class="ps-name">{{ form.studentName }}</text>
+                <text class="ps-meta">{{ form.studentNo }} · {{ form.className || '—' }}</text>
+              </view>
+              <text class="ps-change">更换</text>
+            </view>
+            <!-- 搜索框 -->
+            <view v-else class="search-box">
+              <view class="search-input-wrap">
+                <text class="search-icon">🔍</text>
+                <input
+                  v-model="searchKw"
+                  placeholder="输入学生姓名或学籍号搜索"
+                  class="search-input"
+                  @input="onSearchInput"
+                />
+                <text v-if="searching" class="search-loading">…</text>
+              </view>
+              <!-- 搜索结果 -->
+              <view v-if="searchResults.length > 0" class="search-results">
+                <view
+                  v-for="s in searchResults"
+                  :key="s.studentId"
+                  class="result-item"
+                  @click="pickStudent(s)"
+                >
+                  <view class="ri-avatar"><text class="ri-initial">{{ s.studentName?.charAt(0) }}</text></view>
+                  <view class="ri-info">
+                    <text class="ri-name">{{ s.studentName }}</text>
+                    <text class="ri-meta">{{ s.studentNo }} · {{ s.className || '—' }}</text>
+                  </view>
+                </view>
+              </view>
+              <view v-else-if="searchKw && !searching" class="search-empty">
+                未找到匹配的学生
+              </view>
+            </view>
+          </template>
         </view>
 
         <!-- 请假类型 -->
@@ -171,13 +220,22 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { request } from '../../api/request';
 
 const roleCode = uni.getStorageSync('ycd_roleCode') || 'PARENT';
+// 家长/学生 → 仅可选绑定孩子；教师/管理员 → 代请假可搜索选人
+const isParent = computed(() => roleCode === 'PARENT' || roleCode === 'STUDENT');
+
 const children = ref([]);
 const childrenLoaded = ref(false);
 const loading = ref(false);
+
+// 教师代请假搜索
+const searchKw = ref('');
+const searchResults = ref([]);
+const searching = ref(false);
+let searchTimer = null;
 
 const form = reactive({
   studentId: null,
@@ -197,16 +255,56 @@ const pickChild = (c) => {
   form.studentId = c.studentId;
   form.studentName = c.studentName;
   form.studentNo = c.studentNo || '';
+  form.classId = c.classId || null;
+  form.className = c.className || '';
+};
+
+const pickStudent = (s) => {
+  form.studentId = s.studentId;
+  form.studentName = s.studentName;
+  form.studentNo = s.studentNo || '';
+  form.className = s.className || '';
+  searchResults.value = [];
+  searchKw.value = '';
+};
+
+const clearPicked = () => {
+  form.studentId = null;
+  form.studentName = '';
+  form.studentNo = '';
+  form.className = '';
+};
+
+const onSearchInput = () => {
+  if (searchTimer) clearTimeout(searchTimer);
+  const kw = searchKw.value.trim();
+  if (!kw) { searchResults.value = []; return; }
+  searchTimer = setTimeout(async () => {
+    searching.value = true;
+    try {
+      searchResults.value = await request({
+        url: `/permission/selectable-students?keyword=${encodeURIComponent(kw)}`
+      }) || [];
+    } catch (e) {
+      searchResults.value = [];
+    } finally {
+      searching.value = false;
+    }
+  }, 350);
 };
 
 onMounted(async () => {
-  try {
-    const list = await request({ url: '/permission/my-students' }) || [];
-    children.value = list;
-    if (list.length === 1) pickChild(list[0]);
-  } catch (e) {
-    uni.showToast({ title: e.message || '加载关联学生失败', icon: 'none' });
-  } finally {
+  if (isParent.value) {
+    try {
+      const list = await request({ url: '/permission/selectable-students' }) || [];
+      children.value = list;
+      if (list.length === 1) pickChild(list[0]);
+    } catch (e) {
+      uni.showToast({ title: e.message || '加载关联孩子失败', icon: 'none' });
+    } finally {
+      childrenLoaded.value = true;
+    }
+  } else {
     childrenLoaded.value = true;
   }
 });
@@ -266,6 +364,32 @@ const submit = async () => {
 .title-text { font-size: 28rpx; font-weight: 600; color: #1E293B; }
 .title-req { font-size: 26rpx; color: #EF4444; }
 .title-opt { font-size: 22rpx; color: #94A3B8; }
+.title-mode { font-size: 20rpx; color: #1947C8; background: #EFF6FF; padding: 4rpx 14rpx; border-radius: 20rpx; margin-left: auto; }
+
+/* 教师代请假：搜索选人 */
+.picked-student { display: flex; align-items: center; gap: 18rpx; background: linear-gradient(135deg, #EFF6FF, #DBEAFE); border: 1rpx solid #2B7FFF; border-radius: 18rpx; padding: 20rpx; }
+.ps-avatar { width: 72rpx; height: 72rpx; border-radius: 18rpx; background: linear-gradient(135deg, #1947C8, #2B7FFF); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ps-initial { font-size: 32rpx; font-weight: 700; color: #fff; }
+.ps-info { flex: 1; }
+.ps-name { display: block; font-size: 30rpx; font-weight: 700; color: #1947C8; }
+.ps-meta { display: block; font-size: 22rpx; color: #64748B; margin-top: 4rpx; }
+.ps-change { font-size: 24rpx; color: #2B7FFF; }
+
+.search-box { position: relative; }
+.search-input-wrap { display: flex; align-items: center; background: #F8FAFC; border: 1rpx solid #E2E8F0; border-radius: 16rpx; padding: 0 20rpx; height: 88rpx; }
+.search-icon { font-size: 28rpx; margin-right: 12rpx; }
+.search-input { flex: 1; height: 88rpx; font-size: 28rpx; color: #1E293B; }
+.search-loading { font-size: 26rpx; color: #94A3B8; }
+.search-results { margin-top: 12rpx; background: #fff; border: 1rpx solid #E2E8F0; border-radius: 16rpx; overflow: hidden; max-height: 480rpx; }
+.result-item { display: flex; align-items: center; gap: 16rpx; padding: 20rpx; border-bottom: 1rpx solid #F1F5F9; }
+.result-item:last-child { border-bottom: none; }
+.result-item:active { background: #F8FAFC; }
+.ri-avatar { width: 60rpx; height: 60rpx; border-radius: 16rpx; background: #E2E8F0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ri-initial { font-size: 26rpx; font-weight: 700; color: #64748B; }
+.ri-info { flex: 1; }
+.ri-name { display: block; font-size: 28rpx; font-weight: 600; color: #1E293B; }
+.ri-meta { display: block; font-size: 22rpx; color: #94A3B8; margin-top: 4rpx; }
+.search-empty { margin-top: 12rpx; padding: 32rpx; text-align: center; font-size: 24rpx; color: #94A3B8; background: #F8FAFC; border-radius: 16rpx; }
 
 /* 孩子列表 */
 .no-child { display: flex; align-items: center; gap: 12rpx; background: #FFFBEB; padding: 20rpx; border-radius: 14rpx; border: 1rpx solid #FDE68A; }

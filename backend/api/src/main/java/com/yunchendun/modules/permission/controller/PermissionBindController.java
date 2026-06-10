@@ -4,11 +4,15 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
+import com.yunchendun.common.security.DataPermission;
+import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.permission.domain.ParentStudent;
 import com.yunchendun.modules.permission.domain.TeacherClass;
 import com.yunchendun.modules.permission.mapper.ParentStudentMapper;
 import com.yunchendun.modules.permission.mapper.TeacherClassMapper;
 import com.yunchendun.modules.permission.service.BindImportService;
+import com.yunchendun.modules.student.domain.Student;
+import com.yunchendun.modules.student.mapper.StudentMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -17,6 +21,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +37,8 @@ public class PermissionBindController {
 
     private final TeacherClassMapper teacherClassMapper;
     private final ParentStudentMapper parentStudentMapper;
+    private final StudentMapper studentMapper;
+    private final DataPermissionHelper dataPermissionHelper;
     private final BindImportService bindImportService;
 
     // ==================== 教师-班级绑定 ====================
@@ -125,6 +132,63 @@ public class PermissionBindController {
         return ApiResponse.ok(teacherClassMapper.selectList(
                 new LambdaQueryWrapper<TeacherClass>()
                         .eq(TeacherClass::getTeacherUserId, uid)));
+    }
+
+    /**
+     * 当前用户可为其请假的学生列表（小程序请假申请用）
+     *  - 家长/学生：仅已绑定的孩子（忽略 keyword）
+     *  - 班主任/任课教师：所辖班级的学生，支持 keyword 搜索（代请假可选人）
+     *  - 管理员/校长/教务：全校学生，支持 keyword 搜索
+     * 统一返回 { studentId, studentName, studentNo, className }
+     */
+    @Operation(summary = "可请假学生列表（按角色返回）")
+    @GetMapping("/selectable-students")
+    public ApiResponse<List<Map<String, Object>>> selectableStudents(
+            @RequestParam(required = false) String keyword) {
+        Long uid = StpUtil.getLoginIdAsLong();
+        DataPermission dp = dataPermissionHelper.current();
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        if (dp.isSelf()) {
+            // 家长/学生：仅绑定孩子
+            List<ParentStudent> binds = parentStudentMapper.selectList(
+                    new LambdaQueryWrapper<ParentStudent>()
+                            .eq(ParentStudent::getParentUserId, uid));
+            for (ParentStudent b : binds) {
+                result.add(Map.of(
+                        "studentId", b.getStudentId(),
+                        "studentName", b.getStudentName() == null ? "" : b.getStudentName(),
+                        "studentNo", b.getStudentNo() == null ? "" : b.getStudentNo(),
+                        "className", ""
+                ));
+            }
+            return ApiResponse.ok(result);
+        }
+
+        // 教师/管理员：从学生档案查询
+        LambdaQueryWrapper<Student> w = new LambdaQueryWrapper<Student>()
+                .and(StringUtils.hasText(keyword), q -> q
+                        .like(Student::getName, keyword)
+                        .or().like(Student::getStudentNo, keyword))
+                .orderByAsc(Student::getClassId)
+                .last("LIMIT 100");
+
+        if (dp.isClass()) {
+            // 班主任/任课教师：限定所辖班级
+            if (dp.hasNoClass()) return ApiResponse.ok(result);
+            w.in(Student::getClassId, dp.getClassIds());
+        }
+        // ALL：不限制（全校）
+
+        for (Student s : studentMapper.selectList(w)) {
+            result.add(Map.of(
+                    "studentId", s.getId(),
+                    "studentName", s.getName() == null ? "" : s.getName(),
+                    "studentNo", s.getStudentNo() == null ? "" : s.getStudentNo(),
+                    "className", s.getClassName() == null ? "" : s.getClassName()
+            ));
+        }
+        return ApiResponse.ok(result);
     }
 
     // ==================== Excel 模板下载 / 导入 ====================
