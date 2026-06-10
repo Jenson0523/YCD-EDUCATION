@@ -14,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -146,5 +149,41 @@ public class FaceRecordController {
                 "facePhotoUrl", rec.getFacePhotoUrl(),
                 "message", passed ? "人脸比对通过" : "人脸比对不匹配"
         ));
+    }
+
+    /**
+     * 刷脸识别：上传抓拍照片，在人脸库中检索匹配学生（门卫端免输入学籍号）。
+     * 本期 Mock：返回人脸库中有照片的候选人 + 模拟匹配分（降序），门卫点选确认。
+     * TODO: 接入腾讯云 SearchFaces / 百度人脸搜索，按 1:N 检索返回 Top-K 真实匹配。
+     */
+    @Operation(summary = "刷脸识别（人脸库1:N检索）")
+    @PostMapping("/recognize")
+    public ApiResponse<List<Map<String, Object>>> recognize(@RequestBody Map<String, String> body) {
+        // String capturePhotoUrl = body.get("capturePhotoUrl"); // 真实API会用到
+        List<FaceRecord> lib = faceRecordMapper.selectList(new LambdaQueryWrapper<FaceRecord>()
+                .eq(FaceRecord::getStatus, "ACTIVE")
+                .isNotNull(FaceRecord::getFacePhotoUrl)
+                .ne(FaceRecord::getFacePhotoUrl, "")
+                .orderByDesc(FaceRecord::getUpdatedAt)
+                .last("LIMIT 20"));
+
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        int idx = 0;
+        for (FaceRecord r : lib) {
+            // Mock：首位最高分，其余依次递减，模拟1:N检索置信度
+            double score = idx == 0 ? 96.0 + Math.random() * 3
+                    : Math.max(60.0, 92.0 - idx * 6 - Math.random() * 4);
+            Map<String, Object> m = new HashMap<>();
+            m.put("studentId", r.getStudentId());
+            m.put("studentNo", r.getStudentNo());
+            m.put("realName", r.getRealName());
+            m.put("className", r.getClassName());
+            m.put("facePhotoUrl", r.getFacePhotoUrl());
+            m.put("score", Math.round(score * 10.0) / 10.0);
+            candidates.add(m);
+            idx++;
+            if (idx >= 5) break; // Top-5
+        }
+        return ApiResponse.ok(candidates);
     }
 }

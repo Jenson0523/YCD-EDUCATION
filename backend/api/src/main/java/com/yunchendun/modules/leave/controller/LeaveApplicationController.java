@@ -150,6 +150,10 @@ public class LeaveApplicationController {
         app.setApprovedBy(uid);
         app.setApprovedAt(LocalDateTime.now());
         app.setApproveRemark(body.get("remark"));
+        // 审批签字（批准时必填，前端校验）
+        if (StringUtils.hasText(body.get("signatureUrl"))) {
+            app.setApproveSignatureUrl(body.get("signatureUrl"));
+        }
 
         if ("APPROVED".equals(action)) {
             app.setStatus("APPROVED");

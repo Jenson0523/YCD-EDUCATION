@@ -38,6 +38,13 @@
       }
     },
     {
+      "path": "pages/leave/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "请假详情"
+      }
+    },
+    {
       "path": "pages/leave/approve",
       "style": {
         "navigationStyle": "custom",

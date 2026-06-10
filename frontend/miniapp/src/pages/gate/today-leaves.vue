@@ -49,6 +49,7 @@
           :key="item.id"
           class="leave-card"
           :class="item.departAt ? 'card-departed' : 'card-pending'"
+          @click="goDetail(item.id)"
         >
           <view class="card-left-bar" :class="item.isTemp ? 'bar-amber' : (item.departAt ? 'bar-gray' : 'bar-blue')"></view>
           <view class="card-body">
@@ -111,6 +112,7 @@ onMounted(async () => {
   } finally { loading.value = false; }
 });
 
+const goDetail = (id) => uni.navigateTo({ url: `/pages/leave/detail?id=${id}` });
 const fmtDt = (dt) => {
   if (!dt) return '—';
   const s = dt.replace('T', ' ');

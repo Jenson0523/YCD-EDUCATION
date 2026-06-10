@@ -6,10 +6,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
 import com.yunchendun.common.security.DataPermission;
 import com.yunchendun.common.security.DataPermissionHelper;
+import com.yunchendun.modules.leave.domain.FaceRecord;
 import com.yunchendun.modules.leave.domain.GateVerification;
 import com.yunchendun.modules.leave.domain.LeaveApplication;
+import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
 import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
 import com.yunchendun.modules.leave.mapper.LeaveApplicationMapper;
+import com.yunchendun.modules.student.domain.Student;
+import com.yunchendun.modules.student.mapper.StudentMapper;
 import com.yunchendun.system.domain.SysMessage;
 import com.yunchendun.system.mapper.SysMessageMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,6 +41,8 @@ public class GateVerificationController {
 
     private final GateVerificationMapper verifyMapper;
     private final LeaveApplicationMapper leaveMapper;
+    private final FaceRecordMapper faceRecordMapper;
+    private final StudentMapper studentMapper;
     private final SysMessageMapper messageMapper;
     private final DataPermissionHelper dataPermissionHelper;
 
@@ -85,10 +91,33 @@ public class GateVerificationController {
             resultMsg = "✅ 核验通过，放行";
         }
 
+        // 解析 studentId / studentName（假条优先，否则查人脸档案/学籍）
+        Long studentId = leave != null ? leave.getStudentId() : null;
+        String studentName = leave != null ? leave.getStudentName() : null;
+        if (studentId == null) {
+            FaceRecord fr = faceRecordMapper.selectOne(new LambdaQueryWrapper<FaceRecord>()
+                    .eq(FaceRecord::getStudentNo, studentNo).last("LIMIT 1"));
+            if (fr != null) {
+                studentId = fr.getStudentId();
+                if (studentName == null) studentName = fr.getRealName();
+            }
+        }
+        if (studentId == null) {
+            Student stu = studentMapper.selectOne(new LambdaQueryWrapper<Student>()
+                    .eq(Student::getStudentNo, studentNo).last("LIMIT 1"));
+            if (stu != null) {
+                studentId = stu.getId();
+                if (studentName == null) studentName = stu.getName();
+            }
+        }
+        if (studentName == null) studentName = "未知";
+
         // 记录核验日志
         GateVerification log = new GateVerification();
         log.setVerifyType(verifyType);
-        log.setStudentName(leave != null ? leave.getStudentName() : "未知");
+        log.setStudentId(studentId != null ? studentId : 0L);
+        log.setStudentNo(studentNo);
+        log.setStudentName(studentName);
         log.setLeaveAppId(leave != null ? leave.getId() : null);
         log.setVerifierId(verifierId);
         log.setFaceMatchScore(BigDecimal.valueOf(faceScore));

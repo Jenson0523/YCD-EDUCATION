@@ -35,6 +35,7 @@ public class LeaveApplication {
      */
     private String status;
     private String approveRemark;
+    private String approveSignatureUrl; // 审批人签字图片
     private Long approvedBy;
     private LocalDateTime approvedAt;
     private LocalDateTime departAt;

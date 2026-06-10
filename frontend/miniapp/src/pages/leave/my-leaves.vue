@@ -50,7 +50,7 @@
 
       <!-- 列表 -->
       <view v-else class="list">
-        <view v-for="item in list" :key="item.id" class="leave-card">
+        <view v-for="item in list" :key="item.id" class="leave-card" @click="goDetail(item.id)">
           <!-- 状态指示条 -->
           <view class="status-line" :class="'sl-' + item.status"></view>
 
@@ -133,11 +133,17 @@ const tabInkLeft = computed(() => {
   return (idx >= 0 ? idx : 0) * (750 / tabs.length);
 });
 
+const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+// 家长/学生：看与自己关联的全部学生请假（含老师/家长代申请，由后端数据权限SELF过滤）
+// 教师：看本人发起的申请(role=my)
+const isSelfScope = roleCode === 'PARENT' || roleCode === 'STUDENT';
+
 const load = async (reset = false) => {
   if (reset) { pageNo.value = 1; list.value = []; }
   loading.value = true;
   try {
-    const params = `pageNo=${pageNo.value}&pageSize=${pageSize}&role=my${activeTab.value ? '&status=' + activeTab.value : ''}`;
+    let params = `pageNo=${pageNo.value}&pageSize=${pageSize}${activeTab.value ? '&status=' + activeTab.value : ''}`;
+    if (!isSelfScope) params += '&role=my';
     const data = await request({ url: `/leave/applications?${params}` });
     const records = data?.records || [];
     list.value = reset ? records : [...list.value, ...records];
@@ -150,6 +156,7 @@ const load = async (reset = false) => {
 const switchTab = (val) => { activeTab.value = val; load(true); };
 const loadMore = () => { pageNo.value++; load(); };
 const navApply = () => uni.navigateTo({ url: '/pages/leave/apply' });
+const goDetail = (id) => uni.navigateTo({ url: `/pages/leave/detail?id=${id}` });
 
 const fmtDt = (dt) => dt ? dt.replace('T', ' ').slice(0, 16) : '—';
 const statusLabel = (s) => ({

@@ -1,202 +1,168 @@
 <template>
   <view class="page">
-    <!-- 顶部状态栏占位 -->
-    <view class="status-bar" :style="{ height: statusBarH + 'px' }"></view>
-
-    <!-- 顶部 Header -->
-    <view class="header">
-      <view class="header-left" @click="uni.navigateBack()">
-        <text class="back-icon">‹</text>
-      </view>
-      <view class="header-center">
-        <text class="header-title">人脸核验离校</text>
-        <text class="header-sub">AI · 双重安全校验</text>
-      </view>
-      <view class="header-right" @click="navToday">
-        <text class="today-btn">今日假条</text>
-      </view>
+    <view class="bg-layer">
+      <view class="bg-grid"></view>
+      <view class="bg-glow"></view>
     </view>
 
-    <scroll-view scroll-y class="scroll-body">
+    <view :style="{ height: statusBarH + 'px' }"></view>
 
-      <!-- 扫描仪区域 -->
-      <view class="scanner-wrap">
-        <view class="scanner-outer">
-          <!-- 背景光晕 -->
-          <view class="glow-ring" :class="{ 'glow-active': verifying, 'glow-ok': scanState==='ok', 'glow-fail': scanState==='fail' }"></view>
+    <!-- Header -->
+    <view class="header">
+      <view class="hd-back" hover-class="hd-hover" @click="goBack">‹</view>
+      <view class="hd-center">
+        <text class="hd-title">刷脸核验离校</text>
+        <text class="hd-sub">AI 人脸库 1:N 自动识别</text>
+      </view>
+      <view class="hd-action" hover-class="hd-hover" @click="navToday">假条</view>
+    </view>
 
-          <!-- 照片/占位 -->
-          <view class="scanner-frame" :class="scanState">
-            <image v-if="capturePhotoUrl" :src="capturePhotoUrl" class="scan-photo" mode="aspectFill" />
-            <view v-else class="scan-placeholder">
-              <view class="face-circle">
-                <text class="face-icon">👤</text>
-              </view>
-              <text class="scan-hint">点击「拍照采集」进行人脸采集</text>
-            </view>
-
-            <!-- 四角金色括号 -->
-            <view class="corner c-tl"></view>
-            <view class="corner c-tr"></view>
-            <view class="corner c-bl"></view>
-            <view class="corner c-br"></view>
-
-            <!-- 扫描线（核验中） -->
-            <view v-if="verifying" class="scan-laser"></view>
-
-            <!-- 结果遮罩 -->
-            <view v-if="resultData && !verifying" class="result-overlay" :class="resultData.result">
-              <view class="result-icon-wrap">
-                <text class="result-icon">{{ resultIcon }}</text>
-              </view>
+    <scroll-view scroll-y class="scroll">
+      <!-- 扫描区 -->
+      <view class="scan-section">
+        <view class="scan-frame" :class="scanState">
+          <view class="scan-glow-ring" :class="{ active: scanning }"></view>
+          <image v-if="capturePhoto" :src="capturePhoto" class="scan-img" mode="aspectFill" />
+          <view v-else class="scan-empty">
+            <view class="scan-face-ring">
+              <text class="scan-face">👤</text>
             </view>
           </view>
+          <view class="corner c-tl"></view>
+          <view class="corner c-tr"></view>
+          <view class="corner c-bl"></view>
+          <view class="corner c-br"></view>
+          <view v-if="scanning" class="laser"></view>
+          <view v-if="picked && !scanning" class="ok-mask">
+            <text class="ok-icon">✓</text>
+          </view>
         </view>
-
-        <!-- 状态文字 -->
-        <text class="scan-status-text" :class="{ 'text-verifying': verifying }">
-          {{ verifying ? '正在比对中，请稍候…' : (resultData ? resultData.message : '请先输入学籍号并拍照') }}
-        </text>
+        <text class="scan-tip" :class="{ active: scanning }">{{ scanTip }}</text>
       </view>
 
-      <!-- 学生信息输入 -->
-      <view class="section-card">
-        <view class="card-label">
-          <view class="label-dot"></view>
-          <text class="label-text">学生信息</text>
+      <!-- 刷脸按钮 -->
+      <view v-if="!picked" class="capture-btn" :class="{ disabled: scanning }" hover-class="cap-hover" @click="startScan">
+        <view class="cap-icon-wrap">
+          <text class="cap-icon">📷</text>
         </view>
-        <view class="input-row">
-          <view class="input-wrap">
-            <text class="input-icon">🔍</text>
-            <input
-              v-model="studentNo"
-              placeholder="输入学籍号"
-              class="stu-input"
-              confirm-type="search"
-              @confirm="searchStudent"
-            />
-          </view>
-          <view class="search-btn" :class="{ loading: searching }" @click="searchStudent">
-            {{ searching ? '…' : '查询' }}
-          </view>
-        </view>
-
-        <!-- 学生信息展示 -->
-        <view v-if="studentInfo" class="stu-info-card">
-          <view class="stu-avatar-wrap">
-            <image :src="studentInfo.facePhotoUrl || '/static/avatar-default.png'" class="stu-avatar" mode="aspectFill" />
-            <view class="stu-avatar-badge">
-              <text class="badge-dot"></text>
-            </view>
-          </view>
-          <view class="stu-meta">
-            <text class="stu-name">{{ studentInfo.realName || studentInfo.name }}</text>
-            <text class="stu-class">{{ studentInfo.className || '—' }}</text>
-            <view class="face-status" :class="studentInfo.hasFace ? 'face-ok' : 'face-none'">
-              {{ studentInfo.hasFace ? '✓ 人脸档案已录入' : '⚠ 未录入人脸档案' }}
-            </view>
-          </view>
-          <view class="stu-check">✓</view>
-        </view>
-        <view v-else-if="searched && !studentInfo" class="not-found">
-          <text>未找到该学籍号对应学生档案</text>
-        </view>
+        <text class="cap-text">{{ scanning ? '识别中…' : (capturePhoto ? '重新刷脸' : '点击刷脸识别') }}</text>
       </view>
 
-      <!-- 操作按钮 -->
-      <view class="action-area">
-        <view class="btn-capture" @click="capture">
-          <text class="btn-cap-icon">{{ capturePhotoUrl ? '🔄' : '📷' }}</text>
-          <text class="btn-cap-text">{{ capturePhotoUrl ? '重新拍照' : '拍照采集' }}</text>
+      <!-- 识别候选列表 -->
+      <view v-if="candidates.length > 0 && !picked" class="candidates">
+        <view class="cand-head">
+          <view class="cand-bar"></view>
+          <text class="cand-title">识别到 {{ candidates.length }} 位候选</text>
+          <text class="cand-hint">点击确认身份</text>
         </view>
         <view
-          class="btn-verify"
-          :class="{ 'btn-disabled': !canVerify || verifying, 'btn-loading': verifying }"
-          @click="doVerify"
+          v-for="(c, i) in candidates"
+          :key="c.studentId"
+          class="cand-item"
+          :class="{ 'cand-top': i === 0 }"
+          hover-class="cand-hover"
+          @click="pickCandidate(c)"
         >
-          <text v-if="!verifying" class="btn-verify-text">开始核验</text>
-          <view v-else class="loading-dots">
-            <text class="dot d1">●</text>
-            <text class="dot d2">●</text>
-            <text class="dot d3">●</text>
+          <image :src="resolvePhoto(c.facePhotoUrl)" class="cand-avatar" mode="aspectFill" />
+          <view class="cand-info">
+            <view class="cand-name-row">
+              <text class="cand-name">{{ c.realName }}</text>
+              <view v-if="i === 0" class="cand-best">最佳匹配</view>
+            </view>
+            <text class="cand-meta">{{ c.studentNo }} · {{ c.className || '—' }}</text>
+          </view>
+          <view class="cand-score">
+            <text class="cand-score-num">{{ c.score }}</text>
+            <text class="cand-score-unit">%</text>
           </view>
         </view>
       </view>
 
-      <!-- 结果详情卡 -->
-      <view v-if="resultData" class="result-card" :class="'rc-' + resultData.result">
-        <view class="rc-header">
-          <view class="rc-icon-circle">
-            <text class="rc-icon">{{ resultIcon }}</text>
+      <!-- 已选学生 + 核验 -->
+      <view v-if="picked" class="picked-section">
+        <view class="picked-card">
+          <image :src="resolvePhoto(picked.facePhotoUrl)" class="pk-avatar" mode="aspectFill" />
+          <view class="pk-info">
+            <text class="pk-name">{{ picked.realName }}</text>
+            <text class="pk-meta">{{ picked.studentNo }} · {{ picked.className || '—' }}</text>
+            <view class="pk-score">
+              <view class="pk-score-bar"><view class="pk-score-fill" :style="{ width: picked.score + '%' }"></view></view>
+              <text class="pk-score-text">匹配度 {{ picked.score }}%</text>
+            </view>
           </view>
-          <view class="rc-title-area">
-            <text class="rc-title">{{ resultData.result === 'PASS' ? '放行通过' : resultData.result === 'NO_LEAVE' ? '无有效假条' : '人脸不匹配' }}</text>
-            <text class="rc-time">{{ nowTime }}</text>
+          <view class="pk-change" @click="resetPick">重选</view>
+        </view>
+
+        <view class="verify-btn" :class="{ disabled: verifying }" hover-class="vb-hover" @click="doVerify">
+          <text v-if="!verifying" class="vb-text">核 验 放 行</text>
+          <view v-else class="vb-loading"><text class="vb-dot">●</text><text class="vb-dot">●</text><text class="vb-dot">●</text></view>
+        </view>
+      </view>
+
+      <!-- 核验结果 -->
+      <view v-if="result" class="result-card" :class="'rc-' + result.result">
+        <view class="rc-head">
+          <view class="rc-icon-circle"><text class="rc-icon">{{ resultIcon }}</text></view>
+          <view class="rc-titles">
+            <text class="rc-title">{{ resultTitle }}</text>
+            <text class="rc-time">{{ resultTime }}</text>
           </view>
         </view>
         <view class="rc-divider"></view>
-        <view class="rc-body">
-          <view class="rc-row">
-            <text class="rc-key">人脸匹配度</text>
-            <view class="score-bar-wrap">
-              <view class="score-bar">
-                <view class="score-fill" :style="{ width: resultData.faceScore + '%' }" :class="resultData.faceScore >= 80 ? 'fill-ok' : 'fill-fail'"></view>
-              </view>
-              <text class="score-val">{{ resultData.faceScore }} 分</text>
-            </view>
-          </view>
-          <view v-if="resultData.leaveNo" class="rc-row">
-            <text class="rc-key">假条编号</text>
-            <text class="rc-val">{{ resultData.leaveNo }}</text>
-          </view>
-          <view v-if="resultData.studentName" class="rc-row">
-            <text class="rc-key">学生姓名</text>
-            <text class="rc-val">{{ resultData.studentName }}</text>
-          </view>
-          <view class="rc-row">
-            <text class="rc-key">核验备注</text>
-            <text class="rc-val">{{ resultData.message }}</text>
-          </view>
+        <view class="rc-rows">
+          <view class="rc-row"><text class="rc-k">人脸匹配</text><text class="rc-v mono">{{ result.faceScore }} 分</text></view>
+          <view v-if="result.leaveNo" class="rc-row"><text class="rc-k">假条编号</text><text class="rc-v mono">{{ result.leaveNo }}</text></view>
+          <view v-if="result.studentName" class="rc-row"><text class="rc-k">学生</text><text class="rc-v">{{ result.studentName }}</text></view>
+          <view class="rc-row"><text class="rc-k">结果</text><text class="rc-v">{{ result.message }}</text></view>
         </view>
-        <!-- 重新核验 -->
-        <view class="rc-reset" @click="reset">重新核验</view>
+        <view class="rc-reset" hover-class="rc-reset-hover" @click="resetAll">继续核验下一位</view>
       </view>
 
-      <!-- 快捷功能 -->
-      <view class="quick-section">
-        <view class="quick-title">快捷功能</view>
-        <view class="quick-grid">
-          <view class="quick-item" @click="navToday">
-            <view class="qi-icon-wrap qi-blue">
-              <text class="qi-icon">📋</text>
-            </view>
-            <text class="qi-label">今日假条</text>
-          </view>
-          <view class="quick-item" @click="navTemp">
-            <view class="qi-icon-wrap qi-amber">
-              <text class="qi-icon">⚡</text>
-            </view>
-            <text class="qi-label">临时放行</text>
-          </view>
-          <view class="quick-item" @click="navHistory">
-            <view class="qi-icon-wrap qi-green">
-              <text class="qi-icon">📊</text>
-            </view>
-            <text class="qi-label">核验记录</text>
-          </view>
-        </view>
-      </view>
-
-      <view style="height:60rpx;"></view>
+      <view style="height: 60rpx;"></view>
     </scroll-view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { request, assetUrl } from '../../api/request';
+import { request, uploadFile, assetUrl } from '../../api/request';
 
 const statusBarH = ref(20);
+const capturePhoto = ref('');
+const capturePhotoUrl = ref('');
+const scanning = ref(false);
+const verifying = ref(false);
+const candidates = ref([]);
+const picked = ref(null);
+const result = ref(null);
+const resultTime = ref('');
+
+const scanState = computed(() => {
+  if (scanning.value) return 'scanning';
+  if (result.value) return result.value.result === 'PASS' ? 'ok' : 'fail';
+  if (picked.value) return 'locked';
+  return '';
+});
+
+const scanTip = computed(() => {
+  if (scanning.value) return '正在比对人脸库，请稍候…';
+  if (picked.value) return '已锁定身份，点击核验放行';
+  if (candidates.value.length) return '请确认识别结果';
+  if (capturePhoto.value) return '未识别到匹配，请重试';
+  return '请将学生面部对准取景框刷脸';
+});
+
+const resultIcon = computed(() => {
+  if (!result.value) return '';
+  return result.value.result === 'PASS' ? '✓' : (result.value.result === 'NO_LEAVE' ? '!' : '✕');
+});
+const resultTitle = computed(() => {
+  if (!result.value) return '';
+  return { PASS: '核验通过 · 放行', NO_LEAVE: '无有效假条 · 拦截', FACE_MISMATCH: '人脸不匹配 · 拦截' }[result.value.result] || '已记录';
+});
+
+const resolvePhoto = (u) => assetUrl(u) || '/static/avatar-default.png';
+
 onMounted(() => {
   try {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : uni.getSystemInfoSync();
@@ -204,326 +170,208 @@ onMounted(() => {
   } catch {}
 });
 
-const studentNo = ref('');
-const studentInfo = ref(null);
-const capturePhotoUrl = ref('');
-const verifying = ref(false);
-const searching = ref(false);
-const searched = ref(false);
-const resultData = ref(null);
-
-const nowTime = ref('');
-
-const canVerify = computed(() => !!studentNo.value && !!capturePhotoUrl.value);
-
-const scanState = computed(() => {
-  if (verifying.value) return 'scanning';
-  if (!resultData.value) return '';
-  return resultData.value.result === 'PASS' ? 'ok' : 'fail';
-});
-
-const resultIcon = computed(() => {
-  if (!resultData.value) return '';
-  if (resultData.value.result === 'PASS') return '✓';
-  if (resultData.value.result === 'NO_LEAVE') return '!';
-  return '✕';
-});
-
-const searchStudent = async () => {
-  if (!studentNo.value.trim()) return;
-  searching.value = true;
-  searched.value = false;
-  studentInfo.value = null;
-  resultData.value = null;
-  try {
-    // 先查学生档案
-    const stuData = await request({ url: `/stu/students?keyword=${studentNo.value}&pageSize=5` });
-    const stu = stuData?.records?.find(s => s.studentNo === studentNo.value) || stuData?.records?.[0];
-    if (stu) {
-      // 再查人脸档案
-      let hasFace = false;
-      let facePhotoUrl = '';
-      try {
-        const faceRec = await request({ url: `/leave/face/by-no/${studentNo.value}` });
-        if (faceRec) { hasFace = true; facePhotoUrl = assetUrl(faceRec.facePhotoUrl); }
-      } catch {}
-      studentInfo.value = { ...stu, hasFace, facePhotoUrl };
-    }
-  } catch (e) {
-    uni.showToast({ title: e.message || '查询失败', icon: 'none' });
-  } finally {
-    searching.value = false;
-    searched.value = true;
-  }
-};
-
-const capture = () => {
+const startScan = () => {
+  if (scanning.value) return;
   uni.chooseImage({
-    count: 1,
-    sourceType: ['camera'],
-    success: (res) => {
-      capturePhotoUrl.value = res.tempFilePaths[0];
-      resultData.value = null;
+    count: 1, sourceType: ['camera'],
+    success: async (res) => {
+      capturePhoto.value = res.tempFilePaths[0];
+      result.value = null;
+      candidates.value = [];
+      picked.value = null;
+      scanning.value = true;
+      try {
+        // 上传抓拍照
+        let uploadedUrl = '';
+        try { const up = await uploadFile(capturePhoto.value, 'capture'); uploadedUrl = up.url; } catch {}
+        capturePhotoUrl.value = uploadedUrl;
+        // 人脸库1:N识别
+        const list = await request({
+          url: '/leave/face/recognize', method: 'POST',
+          data: { capturePhotoUrl: uploadedUrl }
+        });
+        // 模拟识别延迟，体现扫描动效
+        await new Promise(r => setTimeout(r, 1200));
+        candidates.value = list || [];
+        if (!candidates.value.length) {
+          uni.showToast({ title: '人脸库中未找到匹配学生', icon: 'none' });
+        }
+      } catch (e) {
+        uni.showToast({ title: e.message || '识别失败', icon: 'none' });
+      } finally {
+        scanning.value = false;
+      }
     }
   });
 };
 
-const doVerify = async () => {
-  if (!canVerify.value || verifying.value) return;
-  verifying.value = true;
-  resultData.value = null;
-  try {
-    // Step1: 人脸比对
-    const compareRes = await request({
-      url: '/leave/face/compare',
-      method: 'POST',
-      data: { studentNo: studentNo.value, capturePhotoUrl: capturePhotoUrl.value }
-    });
+const pickCandidate = (c) => {
+  picked.value = c;
+  try { uni.vibrateShort(); } catch {}
+};
+const resetPick = () => { picked.value = null; };
 
-    // Step2: 门卫核验（假条 + 人脸双重）
+const doVerify = async () => {
+  if (!picked.value || verifying.value) return;
+  verifying.value = true;
+  try {
     const verifyRes = await request({
-      url: '/leave/gate/verify',
-      method: 'POST',
+      url: '/leave/gate/verify', method: 'POST',
       data: {
-        studentNo: studentNo.value,
+        studentNo: picked.value.studentNo,
         capturePhotoUrl: capturePhotoUrl.value,
-        faceMatchScore: compareRes?.score || 0,
+        faceMatchScore: picked.value.score,
         verifyType: 'DEPART'
       }
     });
-
-    nowTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    resultData.value = verifyRes;
-
-    // 震动反馈
-    if (verifyRes.result === 'PASS') {
-      try { uni.vibrateShort(); } catch {}
-    } else {
-      try { uni.vibrateLong(); } catch {}
-    }
+    const d = new Date();
+    resultTime.value = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    result.value = verifyRes;
+    try { verifyRes.result === 'PASS' ? uni.vibrateShort() : uni.vibrateLong(); } catch {}
   } catch (e) {
-    uni.showToast({ title: e.message || '核验失败，请重试', icon: 'none' });
+    uni.showToast({ title: e.message || '核验失败', icon: 'none' });
   } finally {
     verifying.value = false;
   }
 };
 
-const reset = () => {
-  resultData.value = null;
+const resetAll = () => {
+  capturePhoto.value = '';
   capturePhotoUrl.value = '';
-  studentNo.value = '';
-  studentInfo.value = null;
-  searched.value = false;
+  candidates.value = [];
+  picked.value = null;
+  result.value = null;
 };
 
+const goBack = () => uni.navigateBack();
 const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
-const navTemp = () => uni.navigateTo({ url: '/pages/gate/temp-depart' });
-const navHistory = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 </script>
 
 <style scoped>
-/* ─── 全局 ─── */
-.page { background: #060F2B; min-height: 100vh; }
-.status-bar { background: #060F2B; }
-.scroll-body { flex: 1; }
+.page { min-height: 100vh; background: #04081C; position: relative; overflow: hidden; }
+.bg-layer { position: fixed; inset: 0; z-index: 0; }
+.bg-grid { position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(43,127,255,0.05) 1rpx, transparent 1rpx), linear-gradient(90deg, rgba(43,127,255,0.05) 1rpx, transparent 1rpx);
+  background-size: 48rpx 48rpx; mask-image: linear-gradient(180deg, #000, transparent 70%); }
+.bg-glow { position: absolute; width: 600rpx; height: 600rpx; border-radius: 50%; filter: blur(90rpx);
+  background: rgba(0,229,255,0.15); top: -120rpx; right: -160rpx; }
+.scroll { position: relative; z-index: 1; height: calc(100vh - 100rpx); }
 
-/* ─── Header ─── */
-.header {
-  display: flex; align-items: center;
-  padding: 16rpx 32rpx 20rpx;
-  background: #060F2B;
-}
-.header-left { width: 80rpx; }
-.back-icon { font-size: 56rpx; color: rgba(255,255,255,0.7); line-height: 1; }
-.header-center { flex: 1; text-align: center; }
-.header-title { display: block; font-size: 32rpx; font-weight: 700; color: #fff; letter-spacing: 2rpx; }
-.header-sub { display: block; font-size: 20rpx; color: rgba(200,210,255,0.5); margin-top: 4rpx; }
-.today-btn { font-size: 24rpx; color: #E8C068; background: rgba(232,192,104,0.15); padding: 8rpx 20rpx; border-radius: 30rpx; }
+/* Header */
+.header { position: relative; z-index: 2; display: flex; align-items: center; padding: 16rpx 32rpx 20rpx; }
+.hd-back { width: 64rpx; height: 64rpx; line-height: 60rpx; text-align: center; font-size: 52rpx; color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.05); border: 1rpx solid rgba(255,255,255,0.1); border-radius: 12rpx; }
+.hd-hover { background: rgba(0,229,255,0.12); }
+.hd-center { flex: 1; text-align: center; }
+.hd-title { display: block; font-size: 32rpx; font-weight: 700; color: #fff; letter-spacing: 2rpx; }
+.hd-sub { display: block; font-size: 20rpx; color: rgba(0,229,255,0.6); margin-top: 4rpx; font-family: 'Courier New', monospace; }
+.hd-action { padding: 0 24rpx; height: 64rpx; line-height: 64rpx; font-size: 24rpx; color: #00E5FF;
+  background: rgba(0,229,255,0.08); border: 1rpx solid rgba(0,229,255,0.3); border-radius: 12rpx; }
 
-/* ─── 扫描仪 ─── */
-.scanner-wrap { padding: 32rpx 32rpx 0; display: flex; flex-direction: column; align-items: center; }
-.scanner-outer { position: relative; width: 520rpx; height: 520rpx; display: flex; align-items: center; justify-content: center; }
+/* 扫描区 */
+.scan-section { display: flex; flex-direction: column; align-items: center; padding: 24rpx 40rpx 0; }
+.scan-frame { position: relative; width: 480rpx; height: 480rpx; border-radius: 24rpx; overflow: hidden;
+  background: radial-gradient(circle at center, #0A1A40, #04081C); border: 1rpx solid rgba(0,229,255,0.2);
+  transition: all 0.3s; }
+.scan-frame.scanning { border-color: rgba(0,229,255,0.6); box-shadow: 0 0 50rpx rgba(0,229,255,0.3); }
+.scan-frame.locked { border-color: rgba(0,229,255,0.5); }
+.scan-frame.ok { border-color: rgba(0,230,150,0.6); box-shadow: 0 0 50rpx rgba(0,230,150,0.3); }
+.scan-frame.fail { border-color: rgba(255,80,80,0.5); box-shadow: 0 0 50rpx rgba(255,80,80,0.25); }
+.scan-glow-ring { position: absolute; inset: 0; opacity: 0; transition: opacity 0.3s; }
+.scan-glow-ring.active { opacity: 1; background: radial-gradient(circle, transparent 55%, rgba(0,229,255,0.15) 75%); }
+.scan-img { width: 100%; height: 100%; }
+.scan-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.scan-face-ring { width: 200rpx; height: 200rpx; border-radius: 50%; border: 2rpx dashed rgba(0,229,255,0.25);
+  display: flex; align-items: center; justify-content: center; }
+.scan-face { font-size: 110rpx; opacity: 0.3; }
+.corner { position: absolute; width: 44rpx; height: 44rpx; border-color: #00E5FF; border-style: solid; }
+.c-tl { top: 18rpx; left: 18rpx; border-width: 4rpx 0 0 4rpx; border-radius: 8rpx 0 0 0; }
+.c-tr { top: 18rpx; right: 18rpx; border-width: 4rpx 4rpx 0 0; border-radius: 0 8rpx 0 0; }
+.c-bl { bottom: 18rpx; left: 18rpx; border-width: 0 0 4rpx 4rpx; border-radius: 0 0 0 8rpx; }
+.c-br { bottom: 18rpx; right: 18rpx; border-width: 0 4rpx 4rpx 0; border-radius: 0 0 8rpx 0; }
+.laser { position: absolute; left: 18rpx; right: 18rpx; height: 3rpx;
+  background: linear-gradient(90deg, transparent, #00E5FF, transparent); box-shadow: 0 0 20rpx #00E5FF;
+  animation: laser 1.6s ease-in-out infinite; }
+@keyframes laser { 0% { top: 30rpx; } 50% { top: 440rpx; } 100% { top: 30rpx; } }
+.ok-mask { position: absolute; inset: 0; background: rgba(0,229,255,0.12); display: flex; align-items: center; justify-content: center; }
+.ok-icon { width: 120rpx; height: 120rpx; border-radius: 50%; background: rgba(0,229,255,0.9); color: #04081C;
+  font-size: 64rpx; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30rpx rgba(0,229,255,0.6); }
+.scan-tip { margin-top: 24rpx; font-size: 24rpx; color: rgba(255,255,255,0.45); }
+.scan-tip.active { color: #00E5FF; }
 
-/* 光晕 */
-.glow-ring {
-  position: absolute; inset: -20rpx; border-radius: 50%;
-  background: radial-gradient(circle, rgba(43,127,255,0.08) 0%, transparent 70%);
-  transition: all 0.4s;
-}
-.glow-ring.glow-active { background: radial-gradient(circle, rgba(43,127,255,0.25) 0%, transparent 70%); }
-.glow-ring.glow-ok { background: radial-gradient(circle, rgba(12,166,120,0.3) 0%, transparent 70%); }
-.glow-ring.glow-fail { background: radial-gradient(circle, rgba(239,68,68,0.3) 0%, transparent 70%); }
+/* 刷脸按钮 */
+.capture-btn { margin: 36rpx 40rpx 0; display: flex; align-items: center; justify-content: center; gap: 18rpx; height: 104rpx;
+  background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(43,127,255,0.15)); border: 1rpx solid rgba(0,229,255,0.4);
+  border-radius: 18rpx; }
+.cap-hover { background: rgba(0,229,255,0.25); }
+.capture-btn.disabled { opacity: 0.5; }
+.cap-icon-wrap { width: 56rpx; height: 56rpx; border-radius: 50%; background: rgba(0,229,255,0.2);
+  display: flex; align-items: center; justify-content: center; }
+.cap-icon { font-size: 32rpx; }
+.cap-text { font-size: 30rpx; font-weight: 700; color: #00E5FF; letter-spacing: 4rpx; }
 
-/* 扫描框 */
-.scanner-frame {
-  position: relative; width: 480rpx; height: 480rpx;
-  border-radius: 32rpx; overflow: hidden;
-  background: linear-gradient(145deg, #0D1F5C, #061634);
-  border: 1rpx solid rgba(232,192,104,0.2);
-  box-shadow: 0 0 60rpx rgba(0,0,0,0.5);
-  transition: border-color 0.4s, box-shadow 0.4s;
-}
-.scanner-frame.scanning {
-  border-color: rgba(43,127,255,0.6);
-  box-shadow: 0 0 60rpx rgba(43,127,255,0.25);
-}
-.scanner-frame.ok {
-  border-color: rgba(12,166,120,0.6);
-  box-shadow: 0 0 60rpx rgba(12,166,120,0.3);
-}
-.scanner-frame.fail {
-  border-color: rgba(239,68,68,0.5);
-  box-shadow: 0 0 60rpx rgba(239,68,68,0.25);
-}
+/* 候选列表 */
+.candidates { margin: 36rpx 40rpx 0; }
+.cand-head { display: flex; align-items: center; gap: 14rpx; margin-bottom: 20rpx; }
+.cand-bar { width: 6rpx; height: 28rpx; background: linear-gradient(180deg,#00E5FF,#2B7FFF); border-radius: 3rpx; box-shadow: 0 0 10rpx rgba(0,229,255,0.6); }
+.cand-title { font-size: 28rpx; font-weight: 700; color: #fff; flex: 1; }
+.cand-hint { font-size: 22rpx; color: rgba(255,255,255,0.35); }
+.cand-item { display: flex; align-items: center; gap: 20rpx; padding: 22rpx; margin-bottom: 16rpx;
+  background: rgba(255,255,255,0.04); border: 1rpx solid rgba(255,255,255,0.08); border-radius: 16rpx; }
+.cand-top { background: rgba(0,229,255,0.06); border-color: rgba(0,229,255,0.3); }
+.cand-hover { background: rgba(0,229,255,0.12); }
+.cand-avatar { width: 96rpx; height: 96rpx; border-radius: 14rpx; background: #0A1A40; flex-shrink: 0; border: 1rpx solid rgba(255,255,255,0.1); }
+.cand-info { flex: 1; }
+.cand-name-row { display: flex; align-items: center; gap: 12rpx; }
+.cand-name { font-size: 30rpx; font-weight: 700; color: #fff; }
+.cand-best { font-size: 18rpx; color: #00E5FF; background: rgba(0,229,255,0.12); border: 1rpx solid rgba(0,229,255,0.3); padding: 2rpx 12rpx; border-radius: 6rpx; }
+.cand-meta { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 6rpx; font-family: 'Courier New', monospace; }
+.cand-score { display: flex; align-items: baseline; }
+.cand-score-num { font-size: 40rpx; font-weight: 800; color: #00E5FF; font-family: 'Courier New', monospace; text-shadow: 0 0 12rpx rgba(0,229,255,0.4); }
+.cand-score-unit { font-size: 22rpx; color: rgba(0,229,255,0.6); }
 
-.scan-photo { width: 100%; height: 100%; }
-.scan-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.face-circle { width: 200rpx; height: 200rpx; border-radius: 50%; background: rgba(255,255,255,0.04); border: 2rpx solid rgba(232,192,104,0.25); display: flex; align-items: center; justify-content: center; }
-.face-icon { font-size: 120rpx; opacity: 0.35; }
-.scan-hint { margin-top: 32rpx; font-size: 22rpx; color: rgba(255,255,255,0.3); }
+/* 已选 + 核验 */
+.picked-section { margin: 36rpx 40rpx 0; }
+.picked-card { display: flex; align-items: center; gap: 22rpx; padding: 28rpx;
+  background: rgba(0,229,255,0.06); border: 1rpx solid rgba(0,229,255,0.35); border-radius: 18rpx; }
+.pk-avatar { width: 120rpx; height: 120rpx; border-radius: 16rpx; background: #0A1A40; flex-shrink: 0; border: 1rpx solid rgba(0,229,255,0.3); }
+.pk-info { flex: 1; }
+.pk-name { display: block; font-size: 34rpx; font-weight: 800; color: #fff; }
+.pk-meta { display: block; font-size: 22rpx; color: rgba(255,255,255,0.45); margin-top: 6rpx; font-family: 'Courier New', monospace; }
+.pk-score { margin-top: 16rpx; }
+.pk-score-bar { width: 100%; height: 8rpx; background: rgba(255,255,255,0.1); border-radius: 4rpx; overflow: hidden; }
+.pk-score-fill { height: 100%; background: linear-gradient(90deg, #00E5FF, #2B7FFF); border-radius: 4rpx; }
+.pk-score-text { display: block; font-size: 20rpx; color: #00E5FF; margin-top: 8rpx; font-family: 'Courier New', monospace; }
+.pk-change { font-size: 24rpx; color: rgba(255,255,255,0.5); padding: 8rpx 16rpx; }
+.verify-btn { margin-top: 24rpx; height: 104rpx; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #00C2D6, #2B7FFF); border-radius: 18rpx; box-shadow: 0 12rpx 32rpx rgba(0,194,214,0.35); }
+.vb-hover { opacity: 0.85; }
+.verify-btn.disabled { opacity: 0.6; }
+.vb-text { font-size: 34rpx; font-weight: 800; color: #fff; letter-spacing: 8rpx; }
+.vb-loading { display: flex; gap: 12rpx; }
+.vb-dot { font-size: 18rpx; color: #fff; animation: blink 1.2s infinite; }
+.vb-dot:nth-child(2) { animation-delay: 0.2s; }
+.vb-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
 
-/* 四角金色括号 */
-.corner {
-  position: absolute; width: 44rpx; height: 44rpx;
-  border-color: #E8C068;
-  border-style: solid;
-}
-.c-tl { top: 20rpx; left: 20rpx; border-width: 5rpx 0 0 5rpx; border-radius: 8rpx 0 0 0; }
-.c-tr { top: 20rpx; right: 20rpx; border-width: 5rpx 5rpx 0 0; border-radius: 0 8rpx 0 0; }
-.c-bl { bottom: 20rpx; left: 20rpx; border-width: 0 0 5rpx 5rpx; border-radius: 0 0 0 8rpx; }
-.c-br { bottom: 20rpx; right: 20rpx; border-width: 0 5rpx 5rpx 0; border-radius: 0 0 8rpx 0; }
-
-/* 扫描线 */
-.scan-laser {
-  position: absolute; left: 20rpx; right: 20rpx; height: 3rpx;
-  background: linear-gradient(90deg, transparent, #E8C068, rgba(43,127,255,0.8), #E8C068, transparent);
-  box-shadow: 0 0 20rpx rgba(232,192,104,0.8);
-  animation: laserScan 2s ease-in-out infinite;
-}
-@keyframes laserScan { 0% { top: 30rpx; opacity: 1; } 50% { top: 440rpx; opacity: 0.8; } 100% { top: 30rpx; opacity: 1; } }
-
-/* 结果遮罩 */
-.result-overlay {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-}
-.result-overlay.PASS { background: rgba(12,166,120,0.45); }
-.result-overlay.NO_LEAVE { background: rgba(245,158,11,0.45); }
-.result-overlay.FACE_MISMATCH { background: rgba(239,68,68,0.4); }
-.result-icon-wrap {
-  width: 140rpx; height: 140rpx; border-radius: 50%;
-  background: rgba(255,255,255,0.95);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 40rpx rgba(0,0,0,0.3);
-}
-.result-icon { font-size: 72rpx; font-weight: 900; color: #1a1a1a; }
-
-/* 状态文字 */
-.scan-status-text { margin-top: 24rpx; font-size: 24rpx; color: rgba(200,210,255,0.55); text-align: center; }
-.text-verifying { color: #E8C068; animation: textPulse 1.5s ease-in-out infinite; }
-@keyframes textPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
-
-/* ─── 学生信息卡 ─── */
-.section-card {
-  margin: 28rpx 28rpx 0;
-  background: rgba(255,255,255,0.05);
-  border: 1rpx solid rgba(255,255,255,0.08);
-  border-radius: 24rpx;
-  padding: 28rpx;
-  backdrop-filter: blur(20rpx);
-}
-.card-label { display: flex; align-items: center; gap: 12rpx; margin-bottom: 20rpx; }
-.label-dot { width: 8rpx; height: 32rpx; background: linear-gradient(180deg, #E8C068, #2B7FFF); border-radius: 4rpx; }
-.label-text { font-size: 28rpx; font-weight: 600; color: rgba(255,255,255,0.9); }
-
-.input-row { display: flex; gap: 16rpx; align-items: center; }
-.input-wrap { flex: 1; display: flex; align-items: center; background: rgba(255,255,255,0.07); border: 1rpx solid rgba(255,255,255,0.1); border-radius: 16rpx; padding: 0 20rpx; height: 80rpx; }
-.input-icon { font-size: 28rpx; margin-right: 12rpx; }
-.stu-input { flex: 1; height: 80rpx; font-size: 28rpx; color: #fff; background: transparent; }
-.search-btn {
-  height: 80rpx; padding: 0 36rpx; line-height: 80rpx;
-  background: linear-gradient(135deg, #E8C068, #C4973A);
-  color: #1a1a1a; border-radius: 16rpx; font-size: 28rpx; font-weight: 600;
-  box-shadow: 0 8rpx 20rpx rgba(232,192,104,0.3);
-}
-.search-btn.loading { opacity: 0.6; }
-
-/* 学生信息 */
-.stu-info-card { display: flex; align-items: center; gap: 20rpx; margin-top: 24rpx; padding: 20rpx; background: rgba(255,255,255,0.06); border-radius: 16rpx; border: 1rpx solid rgba(232,192,104,0.2); }
-.stu-avatar-wrap { position: relative; flex-shrink: 0; }
-.stu-avatar { width: 88rpx; height: 88rpx; border-radius: 20rpx; background: #1a2a6c; }
-.stu-avatar-badge { position: absolute; bottom: -4rpx; right: -4rpx; width: 24rpx; height: 24rpx; border-radius: 50%; background: #0CA678; border: 3rpx solid #060F2B; }
-.stu-meta { flex: 1; }
-.stu-name { display: block; font-size: 30rpx; font-weight: 700; color: #fff; }
-.stu-class { display: block; font-size: 22rpx; color: rgba(200,210,255,0.55); margin-top: 4rpx; }
-.face-status { display: inline-block; margin-top: 8rpx; font-size: 20rpx; padding: 4rpx 14rpx; border-radius: 20rpx; }
-.face-ok { background: rgba(12,166,120,0.2); color: #0CA678; }
-.face-none { background: rgba(245,158,11,0.2); color: #F59F00; }
-.stu-check { color: #E8C068; font-size: 36rpx; font-weight: 700; }
-.not-found { margin-top: 20rpx; padding: 20rpx; background: rgba(239,68,68,0.1); border-radius: 12rpx; font-size: 26rpx; color: rgba(239,68,68,0.8); text-align: center; }
-
-/* ─── 操作按钮 ─── */
-.action-area { display: flex; gap: 20rpx; margin: 28rpx 28rpx 0; }
-.btn-capture {
-  flex: 1; height: 96rpx;
-  display: flex; align-items: center; justify-content: center; gap: 12rpx;
-  background: rgba(255,255,255,0.07); border: 1rpx solid rgba(255,255,255,0.12);
-  border-radius: 20rpx;
-}
-.btn-cap-icon { font-size: 36rpx; }
-.btn-cap-text { font-size: 28rpx; color: rgba(255,255,255,0.85); font-weight: 500; }
-.btn-verify {
-  flex: 1.4; height: 96rpx;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #1947C8 0%, #2B7FFF 50%, #00B8D9 100%);
-  border-radius: 20rpx;
-  box-shadow: 0 12rpx 32rpx rgba(43,127,255,0.4);
-}
-.btn-verify-text { font-size: 32rpx; font-weight: 700; color: #fff; letter-spacing: 4rpx; }
-.btn-disabled { opacity: 0.4; box-shadow: none; }
-.btn-loading { opacity: 0.8; }
-
-/* 加载点 */
-.loading-dots { display: flex; gap: 12rpx; align-items: center; }
-.dot { font-size: 20rpx; color: rgba(255,255,255,0.7); }
-.d1 { animation: dotFade 1.2s ease-in-out infinite 0s; }
-.d2 { animation: dotFade 1.2s ease-in-out infinite 0.2s; }
-.d3 { animation: dotFade 1.2s ease-in-out infinite 0.4s; }
-@keyframes dotFade { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
-
-/* ─── 结果卡 ─── */
-.result-card { margin: 28rpx 28rpx 0; border-radius: 24rpx; overflow: hidden; }
-.rc-PASS { background: linear-gradient(135deg, #0A2A1E, #0D3D27); border: 1rpx solid rgba(12,166,120,0.35); }
-.rc-NO_LEAVE { background: linear-gradient(135deg, #2A1F0A, #3D2D0D); border: 1rpx solid rgba(245,158,11,0.35); }
-.rc-FACE_MISMATCH { background: linear-gradient(135deg, #2A0A0A, #3D1010); border: 1rpx solid rgba(239,68,68,0.35); }
-.rc-header { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; }
-.rc-icon-circle { width: 72rpx; height: 72rpx; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.rc-icon { font-size: 36rpx; font-weight: 900; color: #fff; }
-.rc-title-area { flex: 1; }
+/* 结果 */
+.result-card { margin: 36rpx 40rpx 0; border-radius: 18rpx; overflow: hidden; border: 1rpx solid; }
+.rc-PASS { background: rgba(0,230,150,0.08); border-color: rgba(0,230,150,0.35); }
+.rc-NO_LEAVE { background: rgba(232,192,104,0.08); border-color: rgba(232,192,104,0.35); }
+.rc-FACE_MISMATCH { background: rgba(255,80,80,0.08); border-color: rgba(255,80,80,0.35); }
+.rc-head { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; }
+.rc-icon-circle { width: 72rpx; height: 72rpx; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+.rc-icon { font-size: 38rpx; font-weight: 900; color: #fff; }
+.rc-titles { flex: 1; }
 .rc-title { display: block; font-size: 30rpx; font-weight: 700; color: #fff; }
-.rc-time { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 4rpx; }
+.rc-time { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 4rpx; font-family: 'Courier New', monospace; }
 .rc-divider { height: 1rpx; background: rgba(255,255,255,0.08); margin: 0 28rpx; }
-.rc-body { padding: 20rpx 28rpx; }
-.rc-row { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid rgba(255,255,255,0.05); }
+.rc-rows { padding: 16rpx 28rpx; }
+.rc-row { display: flex; justify-content: space-between; align-items: center; padding: 12rpx 0; border-bottom: 1rpx solid rgba(255,255,255,0.05); }
 .rc-row:last-child { border-bottom: none; }
-.rc-key { font-size: 24rpx; color: rgba(255,255,255,0.45); }
-.rc-val { font-size: 24rpx; color: rgba(255,255,255,0.85); font-weight: 500; flex: 1; text-align: right; }
-.score-bar-wrap { display: flex; align-items: center; gap: 16rpx; flex: 1; justify-content: flex-end; }
-.score-bar { width: 160rpx; height: 8rpx; background: rgba(255,255,255,0.1); border-radius: 4rpx; overflow: hidden; }
-.score-fill { height: 100%; border-radius: 4rpx; transition: width 0.5s; }
-.fill-ok { background: linear-gradient(90deg, #0CA678, #00D4FF); }
-.fill-fail { background: linear-gradient(90deg, #FA5252, #FF6B6B); }
-.score-val { font-size: 26rpx; color: #fff; font-weight: 600; min-width: 70rpx; text-align: right; }
-.rc-reset { text-align: center; padding: 20rpx; font-size: 26rpx; color: rgba(255,255,255,0.45); border-top: 1rpx solid rgba(255,255,255,0.06); }
-
-/* ─── 快捷功能 ─── */
-.quick-section { margin: 28rpx 28rpx 0; }
-.quick-title { font-size: 24rpx; color: rgba(200,210,255,0.4); margin-bottom: 16rpx; }
-.quick-grid { display: flex; gap: 16rpx; }
-.quick-item { flex: 1; background: rgba(255,255,255,0.04); border: 1rpx solid rgba(255,255,255,0.06); border-radius: 20rpx; padding: 24rpx 0; display: flex; flex-direction: column; align-items: center; gap: 12rpx; }
-.qi-icon-wrap { width: 72rpx; height: 72rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; }
-.qi-blue { background: rgba(43,127,255,0.2); }
-.qi-amber { background: rgba(245,158,11,0.2); }
-.qi-green { background: rgba(12,166,120,0.2); }
-.qi-icon { font-size: 38rpx; }
-.qi-label { font-size: 22rpx; color: rgba(255,255,255,0.5); }
+.rc-k { font-size: 24rpx; color: rgba(255,255,255,0.45); }
+.rc-v { font-size: 24rpx; color: #fff; font-weight: 500; flex: 1; text-align: right; }
+.rc-v.mono { font-family: 'Courier New', monospace; color: #00E5FF; }
+.rc-reset { text-align: center; padding: 24rpx; font-size: 26rpx; color: rgba(0,229,255,0.7); border-top: 1rpx solid rgba(255,255,255,0.06); }
+.rc-reset-hover { background: rgba(0,229,255,0.06); }
 </style>

@@ -49,8 +49,8 @@
 
       <view v-else class="list">
         <view v-for="item in list" :key="item.id" class="apply-card">
-          <!-- 顶部信息 -->
-          <view class="ac-header">
+          <!-- 顶部信息（点击进详情） -->
+          <view class="ac-header" @click="goDetail(item.id)">
             <view class="ac-avatar">
               <text class="ac-initial">{{ item.studentName?.charAt(0) || '学' }}</text>
             </view>
@@ -66,13 +66,14 @@
             </view>
           </view>
 
-          <!-- 详情 -->
-          <view class="ac-body">
+          <!-- 详情（点击进详情） -->
+          <view class="ac-body" @click="goDetail(item.id)">
             <view class="ac-row">
               <view class="ac-type" :class="item.leaveType === 'SICK' ? 'type-sick' : 'type-personal'">
                 {{ item.leaveType === 'SICK' ? '🤒 病假' : '📌 事假' }}
               </view>
               <view v-if="item.isTemp" class="ac-temp-tag">⚡ 临时</view>
+              <text class="ac-detail-link">详情 ›</text>
             </view>
             <view class="ac-reason">{{ item.reason }}</view>
             <view class="ac-time-range">
@@ -93,8 +94,8 @@
             <view class="btn-reject" @click="openReject(item)">
               <text class="btn-reject-text">✕ 驳回</text>
             </view>
-            <view class="btn-approve" @click="doApprove(item.id, 'APPROVED', '')">
-              <text class="btn-approve-text">✓ 批准</text>
+            <view class="btn-approve" @click="openApprove(item)">
+              <text class="btn-approve-text">✓ 签字批准</text>
             </view>
           </view>
 
@@ -121,12 +122,46 @@
         </view>
       </view>
     </view>
+
+    <!-- 签字批准弹窗 -->
+    <view v-if="signVisible" class="modal-mask" @click.self="closeSign">
+      <view class="sign-modal">
+        <view class="modal-header">
+          <text class="modal-title">审批签字</text>
+          <text class="modal-close" @click="closeSign">✕</text>
+        </view>
+        <text class="sign-tip">请在下方区域手写签名确认批准</text>
+        <view class="sign-canvas-wrap">
+          <canvas
+            canvas-id="sigCanvas"
+            id="sigCanvas"
+            class="sign-canvas"
+            disable-scroll
+            @touchstart="sigStart"
+            @touchmove="sigMove"
+            @touchend="sigEnd"
+          ></canvas>
+          <text v-if="sigEmpty" class="sign-placeholder">在此处签名</text>
+        </view>
+        <view class="sign-toolbar">
+          <view class="sign-clear" @click="clearSign">🗑 清除重写</view>
+        </view>
+        <input v-model="approveRemark" placeholder="审批意见（选填）" class="sign-remark" />
+        <view class="modal-actions">
+          <view class="modal-btn-cancel" @click="closeSign">取消</view>
+          <view class="modal-btn-confirm green" :class="{ disabled: submitting }" @click="confirmApprove">
+            {{ submitting ? '提交中…' : '确认批准' }}
+          </view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { request } from '../../api/request';
+import { getCurrentInstance } from 'vue';
+import { request, uploadFile } from '../../api/request';
 
 const tabs = [
   { label: '待审批', value: 'PENDING' },
@@ -140,6 +175,16 @@ const pendingCount = ref(0);
 const rejectVisible = ref(false);
 const rejectId = ref(null);
 const rejectRemark = ref('');
+
+// 签字批准
+const signVisible = ref(false);
+const signId = ref(null);
+const approveRemark = ref('');
+const submitting = ref(false);
+const sigEmpty = ref(true);
+let sigCtx = null;
+let lastX = 0, lastY = 0;
+const instance = getCurrentInstance();
 
 const tabInkLeft = computed(() => {
   const idx = tabs.findIndex(t => t.value === activeTab.value);
@@ -184,6 +229,78 @@ const confirmReject = () => {
   doApprove(rejectId.value, 'REJECTED', rejectRemark.value);
   rejectVisible.value = false;
 };
+
+// ── 签字批准 ──
+const openApprove = (item) => {
+  signId.value = item.id;
+  approveRemark.value = '';
+  sigEmpty.value = true;
+  signVisible.value = true;
+  setTimeout(() => {
+    sigCtx = uni.createCanvasContext('sigCanvas', instance);
+    sigCtx.setStrokeStyle('#1947C8');
+    sigCtx.setLineWidth(4);
+    sigCtx.setLineCap('round');
+    sigCtx.setLineJoin('round');
+  }, 150);
+};
+
+const closeSign = () => { signVisible.value = false; };
+
+const sigStart = (e) => {
+  const t = e.touches[0];
+  lastX = t.x; lastY = t.y;
+  sigEmpty.value = false;
+};
+const sigMove = (e) => {
+  if (!sigCtx) return;
+  const t = e.touches[0];
+  sigCtx.beginPath();
+  sigCtx.moveTo(lastX, lastY);
+  sigCtx.lineTo(t.x, t.y);
+  sigCtx.stroke();
+  sigCtx.draw(true);
+  lastX = t.x; lastY = t.y;
+};
+const sigEnd = () => {};
+
+const clearSign = () => {
+  if (!sigCtx) return;
+  sigCtx.clearRect(0, 0, 2000, 2000);
+  sigCtx.draw();
+  sigEmpty.value = true;
+};
+
+const confirmApprove = async () => {
+  if (sigEmpty.value) { uni.showToast({ title: '请先签名', icon: 'none' }); return; }
+  submitting.value = true;
+  try {
+    // 导出签名图片
+    const tempPath = await new Promise((resolve, reject) => {
+      uni.canvasToTempFilePath({
+        canvasId: 'sigCanvas',
+        success: (res) => resolve(res.tempFilePath),
+        fail: (err) => reject(err)
+      }, instance);
+    });
+    // 上传签名
+    let sigUrl = '';
+    try { const up = await uploadFile(tempPath, 'signature'); sigUrl = up.url; } catch {}
+    await request({
+      url: `/leave/applications/${signId.value}/approve`, method: 'PUT',
+      data: { action: 'APPROVED', remark: approveRemark.value, signatureUrl: sigUrl }
+    });
+    uni.showToast({ title: '✓ 已签字批准', icon: 'none' });
+    signVisible.value = false;
+    load();
+  } catch (e) {
+    uni.showToast({ title: e.message || '批准失败', icon: 'none' });
+  } finally {
+    submitting.value = false;
+  }
+};
+
+const goDetail = (id) => uni.navigateTo({ url: `/pages/leave/detail?id=${id}` });
 
 const fmtDt = (dt) => dt ? dt.replace('T', ' ').slice(0, 16) : '—';
 const statusLabel = (s) => ({
@@ -296,4 +413,19 @@ onMounted(() => {
 .modal-actions { display: flex; gap: 16rpx; margin-top: 24rpx; }
 .modal-btn-cancel { flex: 1; height: 88rpx; line-height: 88rpx; text-align: center; background: #F3F4F6; border-radius: 16rpx; font-size: 28rpx; color: #374151; }
 .modal-btn-confirm { flex: 1; height: 88rpx; line-height: 88rpx; text-align: center; background: linear-gradient(135deg, #DC2626, #EF4444); border-radius: 16rpx; font-size: 28rpx; color: #fff; font-weight: 700; }
+.modal-btn-confirm.green { background: linear-gradient(135deg, #059669, #10B981); }
+.modal-btn-confirm.disabled { opacity: 0.6; }
+
+/* 详情链接 */
+.ac-detail-link { margin-left: auto; font-size: 22rpx; color: #2B7FFF; }
+
+/* 签字弹窗 */
+.sign-modal { background: #fff; border-radius: 28rpx 28rpx 0 0; padding: 32rpx; width: 100%; box-sizing: border-box; }
+.sign-tip { display: block; font-size: 24rpx; color: #9CA3AF; margin-bottom: 16rpx; }
+.sign-canvas-wrap { position: relative; width: 100%; height: 320rpx; background: #F8FAFC; border: 2rpx dashed #CBD5E1; border-radius: 16rpx; overflow: hidden; }
+.sign-canvas { width: 100%; height: 320rpx; }
+.sign-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 40rpx; color: #E2E8F0; pointer-events: none; }
+.sign-toolbar { display: flex; justify-content: flex-end; margin-top: 14rpx; }
+.sign-clear { font-size: 24rpx; color: #64748B; padding: 8rpx 20rpx; background: #F1F5F9; border-radius: 10rpx; }
+.sign-remark { width: 100%; height: 80rpx; margin-top: 16rpx; padding: 0 20rpx; background: #F8FAFC; border: 1rpx solid #E2E8F0; border-radius: 14rpx; font-size: 26rpx; box-sizing: border-box; }
 </style>

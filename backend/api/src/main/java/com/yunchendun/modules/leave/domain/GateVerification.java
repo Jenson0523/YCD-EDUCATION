@@ -17,6 +17,7 @@ public class GateVerification {
     private Long tenantId;
     private String verifyType;  // DEPART / RETURN
     private Long studentId;
+    private String studentNo;
     private String studentName;
     private Long leaveAppId;
     private Long verifierId;
