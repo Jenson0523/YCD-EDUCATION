@@ -58,11 +58,20 @@ public class FaceRecordController {
     }
 
     /** 根据学生ID查询人脸档案 */
-    @Operation(summary = "查询某学生人脸档案")
+    @Operation(summary = "查询某学生人脸档案（by studentId）")
     @GetMapping("/by-student/{studentId}")
     public ApiResponse<FaceRecord> getByStudent(@PathVariable Long studentId) {
         FaceRecord rec = faceRecordMapper.selectOne(
                 new LambdaQueryWrapper<FaceRecord>().eq(FaceRecord::getStudentId, studentId));
+        return ApiResponse.ok(rec);
+    }
+
+    /** 根据学籍号查询人脸档案（门卫核验专用） */
+    @Operation(summary = "查询某学生人脸档案（by studentNo）")
+    @GetMapping("/by-no/{studentNo}")
+    public ApiResponse<FaceRecord> getByStudentNo(@PathVariable String studentNo) {
+        FaceRecord rec = faceRecordMapper.selectOne(
+                new LambdaQueryWrapper<FaceRecord>().eq(FaceRecord::getStudentNo, studentNo));
         return ApiResponse.ok(rec);
     }
 

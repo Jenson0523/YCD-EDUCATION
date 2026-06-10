@@ -7,7 +7,7 @@
 
 // 真机调试/扫码预览时必须用电脑局域网IP（手机访问不到 localhost）
 // 纯模拟器调试可改回 http://localhost:8080/api
-const BASE_URL = 'http://192.168.0.40:8080/api';
+const BASE_URL = 'http://192.168.0.40:8081/api';
 
 export function request({ url, method = 'GET', data }) {
   return new Promise((resolve, reject) => {
