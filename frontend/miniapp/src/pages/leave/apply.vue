@@ -152,17 +152,20 @@
             <text class="title-text">计划离校时间</text>
             <text class="title-req">*</text>
           </view>
-          <picker mode="dateTime" :value="form.leaveStart" @change="e => form.leaveStart = e.detail.value">
-            <view class="date-btn">
-              <view class="date-btn-left">
-                <text class="date-icon">📅</text>
-                <text class="date-text" :class="{ 'date-placeholder': !form.leaveStart }">
-                  {{ form.leaveStart || '点击选择离校日期时间' }}
-                </text>
+          <view class="datetime-row">
+            <picker mode="date" :value="startDate" :start="todayStr" @change="e => startDate = e.detail.value">
+              <view class="dt-btn">
+                <text class="dt-icon">📅</text>
+                <text class="dt-text" :class="{ 'dt-ph': !startDate }">{{ startDate || '选择日期' }}</text>
               </view>
-              <text class="date-arrow">›</text>
-            </view>
-          </picker>
+            </picker>
+            <picker mode="time" :value="startTime" @change="e => startTime = e.detail.value">
+              <view class="dt-btn">
+                <text class="dt-icon">🕐</text>
+                <text class="dt-text" :class="{ 'dt-ph': !startTime }">{{ startTime || '选择时间' }}</text>
+              </view>
+            </picker>
+          </view>
         </view>
 
         <!-- 返校时间 -->
@@ -172,24 +175,27 @@
             <text class="title-text">预计返校时间</text>
             <text class="title-req">*</text>
           </view>
-          <picker mode="dateTime" :value="form.leaveEnd" @change="e => form.leaveEnd = e.detail.value">
-            <view class="date-btn">
-              <view class="date-btn-left">
-                <text class="date-icon">🔙</text>
-                <text class="date-text" :class="{ 'date-placeholder': !form.leaveEnd }">
-                  {{ form.leaveEnd || '点击选择返校日期时间' }}
-                </text>
+          <view class="datetime-row">
+            <picker mode="date" :value="endDate" :start="todayStr" @change="e => endDate = e.detail.value">
+              <view class="dt-btn">
+                <text class="dt-icon">📅</text>
+                <text class="dt-text" :class="{ 'dt-ph': !endDate }">{{ endDate || '选择日期' }}</text>
               </view>
-              <text class="date-arrow">›</text>
-            </view>
-          </picker>
+            </picker>
+            <picker mode="time" :value="endTime" @change="e => endTime = e.detail.value">
+              <view class="dt-btn">
+                <text class="dt-icon">🕐</text>
+                <text class="dt-text" :class="{ 'dt-ph': !endTime }">{{ endTime || '选择时间' }}</text>
+              </view>
+            </picker>
+          </view>
         </view>
 
-        <!-- 凭证照片 -->
+        <!-- 凭证照片（病例，选填） -->
         <view class="field-section">
           <view class="section-title">
             <view class="title-dot"></view>
-            <text class="title-text">凭证照片</text>
+            <text class="title-text">凭证照片 / 病例</text>
             <text class="title-opt">（选填）</text>
           </view>
           <view class="photo-area" @click="choosePhoto">
@@ -202,6 +208,41 @@
               <text class="pp-sub">照片 · 最大 5MB</text>
             </view>
           </view>
+        </view>
+
+        <!-- 人脸录入（必须，门卫核验离校用） -->
+        <view class="field-section" v-if="form.studentId">
+          <view class="section-title">
+            <view class="title-dot"></view>
+            <text class="title-text">人脸录入</text>
+            <text class="title-req">*</text>
+            <text class="title-hint">门卫核验离校必需</text>
+          </view>
+
+          <!-- 已有人脸档案 -->
+          <view v-if="faceStatus === 'has'" class="face-enrolled">
+            <image :src="facePhotoUrl" class="fe-photo" mode="aspectFill" />
+            <view class="fe-info">
+              <text class="fe-ok">✓ 已录入人脸档案</text>
+              <text class="fe-sub">可正常通过门卫核验离校</text>
+            </view>
+            <view class="fe-reupload" @click="enrollFace">重新录入</view>
+          </view>
+
+          <!-- 未录入：需上传 -->
+          <view v-else-if="faceStatus === 'none'" class="face-enroll-area">
+            <view class="face-upload-box" @click="enrollFace">
+              <image v-if="form.facePhotoUrl" :src="form.facePhotoUrl" class="fe-preview" mode="aspectFill" />
+              <view v-else class="fe-placeholder">
+                <text class="fe-icon">📷</text>
+                <text class="fe-text">拍摄 / 上传人脸照片</text>
+                <text class="fe-tip">清晰正脸 · 用于AI核验</text>
+              </view>
+            </view>
+            <view class="face-warn">⚠️ 该学生尚未录入人脸，请拍照录入后方可离校核验</view>
+          </view>
+
+          <view v-else class="face-loading">检查人脸档案中…</view>
         </view>
 
       </view>
@@ -220,8 +261,8 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
-import { request } from '../../api/request';
+import { reactive, ref, computed, watch, onMounted } from 'vue';
+import { request, uploadFile, assetUrl } from '../../api/request';
 
 const roleCode = uni.getStorageSync('ycd_roleCode') || 'PARENT';
 // 家长/学生 → 仅可选绑定孩子；教师/管理员 → 代请假可搜索选人
@@ -237,6 +278,17 @@ const searchResults = ref([]);
 const searching = ref(false);
 let searchTimer = null;
 
+// 日期/时间拆分选择（微信 picker 不支持 dateTime，需 date + time 组合）
+const todayStr = formatDate(new Date());
+const startDate = ref('');
+const startTime = ref('');
+const endDate = ref('');
+const endTime = ref('');
+
+// 人脸档案状态：checking / has / none
+const faceStatus = ref('');
+const facePhotoUrl = ref('');
+
 const form = reactive({
   studentId: null,
   studentName: '',
@@ -248,8 +300,46 @@ const form = reactive({
   leaveStart: '',
   leaveEnd: '',
   proofPhotoUrl: '',
+  facePhotoUrl: '',
   applicantRole: (roleCode === 'TEACHER' || roleCode === 'HEAD_TEACHER') ? 'TEACHER' : 'PARENT'
 });
+
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// 组合日期+时间 → form.leaveStart / leaveEnd（yyyy-MM-dd HH:mm:ss）
+watch([startDate, startTime], () => {
+  form.leaveStart = (startDate.value && startTime.value)
+    ? `${startDate.value} ${startTime.value}:00` : '';
+});
+watch([endDate, endTime], () => {
+  form.leaveEnd = (endDate.value && endTime.value)
+    ? `${endDate.value} ${endTime.value}:00` : '';
+});
+
+// 选中学生后检查人脸档案
+const checkFace = async (studentNo) => {
+  if (!studentNo) { faceStatus.value = ''; return; }
+  faceStatus.value = 'checking';
+  facePhotoUrl.value = '';
+  form.facePhotoUrl = '';
+  try {
+    const rec = await request({ url: `/leave/face/by-no/${studentNo}` });
+    if (rec && rec.facePhotoUrl) {
+      faceStatus.value = 'has';
+      facePhotoUrl.value = assetUrl(rec.facePhotoUrl);
+      form.facePhotoUrl = rec.facePhotoUrl;
+    } else {
+      faceStatus.value = 'none';
+    }
+  } catch {
+    faceStatus.value = 'none';
+  }
+};
 
 const pickChild = (c) => {
   form.studentId = c.studentId;
@@ -257,6 +347,7 @@ const pickChild = (c) => {
   form.studentNo = c.studentNo || '';
   form.classId = c.classId || null;
   form.className = c.className || '';
+  checkFace(form.studentNo);
 };
 
 const pickStudent = (s) => {
@@ -266,6 +357,7 @@ const pickStudent = (s) => {
   form.className = s.className || '';
   searchResults.value = [];
   searchKw.value = '';
+  checkFace(form.studentNo);
 };
 
 const clearPicked = () => {
@@ -273,6 +365,7 @@ const clearPicked = () => {
   form.studentName = '';
   form.studentNo = '';
   form.className = '';
+  faceStatus.value = '';
 };
 
 const onSearchInput = () => {
@@ -312,15 +405,65 @@ onMounted(async () => {
 const choosePhoto = () => {
   uni.chooseImage({
     count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'],
-    success: (res) => { form.proofPhotoUrl = res.tempFilePaths[0]; }
+    success: async (res) => {
+      const tempPath = res.tempFilePaths[0];
+      uni.showLoading({ title: '上传中…' });
+      try {
+        const data = await uploadFile(tempPath, 'proof');
+        form.proofPhotoUrl = assetUrl(data.url);
+      } catch (e) {
+        form.proofPhotoUrl = tempPath; // 兜底用本地预览
+      } finally {
+        uni.hideLoading();
+      }
+    }
+  });
+};
+
+// 录入人脸（拍照上传 + 写入档案）
+const enrollFace = () => {
+  if (!form.studentId) return;
+  uni.chooseImage({
+    count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'],
+    success: async (res) => {
+      const tempPath = res.tempFilePaths[0];
+      uni.showLoading({ title: '录入人脸中…' });
+      try {
+        const up = await uploadFile(tempPath, 'face');
+        // 写入/更新人脸档案
+        await request({
+          url: '/leave/face', method: 'POST',
+          data: {
+            studentId: form.studentId,
+            studentNo: form.studentNo,
+            realName: form.studentName,
+            classId: form.classId,
+            className: form.className,
+            facePhotoUrl: up.url
+          }
+        });
+        form.facePhotoUrl = up.url;
+        facePhotoUrl.value = assetUrl(up.url);
+        faceStatus.value = 'has';
+        uni.showToast({ title: '✓ 人脸录入成功', icon: 'none' });
+      } catch (e) {
+        uni.showToast({ title: e.message || '人脸录入失败', icon: 'none' });
+      } finally {
+        uni.hideLoading();
+      }
+    }
   });
 };
 
 const submit = async () => {
   if (!form.studentId) { uni.showToast({ title: '请选择请假学生', icon: 'none' }); return; }
   if (!form.reason.trim()) { uni.showToast({ title: '请填写请假原因', icon: 'none' }); return; }
-  if (!form.leaveStart) { uni.showToast({ title: '请选择离校时间', icon: 'none' }); return; }
-  if (!form.leaveEnd) { uni.showToast({ title: '请选择返校时间', icon: 'none' }); return; }
+  if (!form.leaveStart) { uni.showToast({ title: '请选择完整的离校日期和时间', icon: 'none' }); return; }
+  if (!form.leaveEnd) { uni.showToast({ title: '请选择完整的返校日期和时间', icon: 'none' }); return; }
+  if (faceStatus.value !== 'has' || !form.facePhotoUrl) {
+    uni.showToast({ title: '请先为学生录入人脸（门卫核验离校必需）', icon: 'none', duration: 2500 });
+    return;
+  }
   loading.value = true;
   try {
     await request({ url: '/leave/applications', method: 'POST', data: form });
@@ -434,13 +577,31 @@ const submit = async () => {
 }
 .char-count { position: absolute; right: 16rpx; bottom: 14rpx; font-size: 20rpx; color: #CBD5E1; }
 
-/* Date Button */
-.date-btn { display: flex; align-items: center; background: #F8FAFC; border: 1rpx solid #E2E8F0; border-radius: 16rpx; padding: 0 24rpx; height: 88rpx; }
-.date-btn-left { display: flex; align-items: center; gap: 14rpx; flex: 1; }
-.date-icon { font-size: 30rpx; }
-.date-text { font-size: 28rpx; color: #1E293B; }
-.date-placeholder { color: #CBD5E1; }
-.date-arrow { font-size: 44rpx; color: #CBD5E1; }
+/* Date+Time 拆分选择 */
+.datetime-row { display: flex; gap: 16rpx; }
+.datetime-row picker { flex: 1; }
+.dt-btn { display: flex; align-items: center; gap: 12rpx; background: #F8FAFC; border: 1rpx solid #E2E8F0; border-radius: 16rpx; padding: 0 20rpx; height: 88rpx; }
+.dt-icon { font-size: 28rpx; }
+.dt-text { font-size: 26rpx; color: #1E293B; }
+.dt-ph { color: #CBD5E1; }
+
+/* Face enrollment */
+.title-hint { font-size: 20rpx; color: #EA580C; background: #FFF7ED; padding: 4rpx 12rpx; border-radius: 20rpx; margin-left: auto; }
+.face-enrolled { display: flex; align-items: center; gap: 18rpx; background: linear-gradient(135deg, #ECFDF5, #D1FAE5); border: 1rpx solid #6EE7B7; border-radius: 18rpx; padding: 20rpx; }
+.fe-photo { width: 96rpx; height: 96rpx; border-radius: 16rpx; background: #fff; flex-shrink: 0; }
+.fe-info { flex: 1; }
+.fe-ok { display: block; font-size: 28rpx; font-weight: 700; color: #059669; }
+.fe-sub { display: block; font-size: 22rpx; color: #10B981; margin-top: 4rpx; }
+.fe-reupload { font-size: 24rpx; color: #059669; }
+.face-enroll-area {}
+.face-upload-box { width: 220rpx; height: 220rpx; border-radius: 20rpx; overflow: hidden; border: 2rpx dashed #FB923C; background: #FFF7ED; }
+.fe-preview { width: 100%; height: 100%; }
+.fe-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8rpx; }
+.fe-icon { font-size: 56rpx; }
+.fe-text { font-size: 24rpx; color: #EA580C; font-weight: 600; }
+.fe-tip { font-size: 18rpx; color: #FB923C; }
+.face-warn { margin-top: 14rpx; font-size: 22rpx; color: #EA580C; background: #FFF7ED; padding: 14rpx 18rpx; border-radius: 12rpx; }
+.face-loading { padding: 24rpx; text-align: center; font-size: 24rpx; color: #94A3B8; background: #F8FAFC; border-radius: 16rpx; }
 
 /* Photo */
 .photo-area { width: 200rpx; height: 200rpx; border-radius: 20rpx; overflow: hidden; border: 2rpx dashed #CBD5E1; }

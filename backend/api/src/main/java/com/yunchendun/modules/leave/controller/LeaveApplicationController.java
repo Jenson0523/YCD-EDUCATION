@@ -10,6 +10,8 @@ import com.yunchendun.modules.leave.domain.LeaveApplication;
 import com.yunchendun.modules.leave.domain.TempSupplementOrder;
 import com.yunchendun.modules.leave.mapper.LeaveApplicationMapper;
 import com.yunchendun.modules.leave.mapper.TempSupplementOrderMapper;
+import com.yunchendun.modules.permission.domain.TeacherClass;
+import com.yunchendun.modules.permission.mapper.TeacherClassMapper;
 import com.yunchendun.system.domain.SysMessage;
 import com.yunchendun.system.mapper.SysMessageMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,6 +40,7 @@ public class LeaveApplicationController {
     private final LeaveApplicationMapper leaveMapper;
     private final TempSupplementOrderMapper supplementMapper;
     private final SysMessageMapper messageMapper;
+    private final TeacherClassMapper teacherClassMapper;
     private final DataPermissionHelper dataPermissionHelper;
 
     private static final AtomicLong SEQ = new AtomicLong(System.currentTimeMillis() % 10000);
@@ -122,10 +125,11 @@ public class LeaveApplicationController {
         req.setTenantId(1L);
         leaveMapper.insert(req);
 
-        // 通知班主任（如果 classId 存在则精准推，否则广播给所有班主任 - 此处简化：存系统消息）
-        pushMessage(null, uid,
-                "新请假申请提醒",
-                req.getStudentName() + " 的请假申请待您审批（" + req.getLeaveType() + "）",
+        // 精准通知该班级的班主任/任课教师审批
+        notifyClassTeachers(req.getClassId(), uid,
+                "新请假申请待审批",
+                req.getStudentName() + " 提交了请假申请（" + leaveTypeText(req.getLeaveType())
+                        + "），请及时审批。",
                 "LEAVE_APPLY", req.getId());
         return ApiResponse.ok(req);
     }
@@ -211,7 +215,7 @@ public class LeaveApplicationController {
         supplementMapper.insert(order);
 
         // 推送班主任补批提醒
-        pushMessage(null, uid,
+        notifyClassTeachers(req.getClassId(), uid,
                 "⚠️ 临时离校待补批",
                 req.getStudentName() + " 已由门卫临时放行，请在24小时内线上补批。假条号：" + req.getLeaveNo(),
                 "TEMP_SUPPLEMENT", req.getId());
@@ -247,5 +251,33 @@ public class LeaveApplicationController {
         msg.setIsRead(0);
         msg.setTenantId(1L);
         messageMapper.insert(msg);
+    }
+
+    /**
+     * 通知某班级的全部关联教师（班主任优先）。
+     * 找不到绑定教师时回退为广播(receiverId=0)，避免消息丢失。
+     * TODO: 接入微信订阅消息(subscribeMessage)实现"班主任微信收到通知"，需配置模板ID与用户订阅授权。
+     */
+    private void notifyClassTeachers(Long classId, Long senderId, String title, String content,
+                                     String bizType, Long bizId) {
+        if (classId != null) {
+            List<TeacherClass> teachers = teacherClassMapper.selectList(
+                    new LambdaQueryWrapper<TeacherClass>()
+                            .eq(TeacherClass::getClassId, classId));
+            if (teachers != null && !teachers.isEmpty()) {
+                for (TeacherClass tc : teachers) {
+                    pushMessage(tc.getTeacherUserId(), senderId, title, content, bizType, bizId);
+                }
+                return;
+            }
+        }
+        // 回退：广播
+        pushMessage(0L, senderId, title, content, bizType, bizId);
+    }
+
+    private String leaveTypeText(String type) {
+        if ("SICK".equals(type)) return "病假";
+        if ("PERSONAL".equals(type)) return "事假";
+        return type == null ? "请假" : type;
     }
 }

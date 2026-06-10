@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -30,9 +31,12 @@ public class LoginInterceptor implements HandlerInterceptor {
         } catch (NotLoginException e) {
             response.setStatus(401);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
-            response.getWriter().write(MAPPER.writeValueAsString(
-                    Map.of("code", 401, "message", "未登录或登录已过期，请重新登录", "data", null)
-            ));
+            // 注意：Map.of 不允许 null 值，需用 HashMap 承载 data=null
+            Map<String, Object> body = new HashMap<>();
+            body.put("code", 401);
+            body.put("message", "未登录或登录已过期，请重新登录");
+            body.put("data", null);
+            response.getWriter().write(MAPPER.writeValueAsString(body));
             return false;
         }
     }

@@ -42,6 +42,30 @@ export function assetUrl(path) {
   return HOST_ROOT + '/' + path;
 }
 
+/** 上传图片文件，返回 { url, absoluteUrl } */
+export function uploadFile(filePath, category = 'common') {
+  return new Promise((resolve, reject) => {
+    const token = uni.getStorageSync('ycd_token') || '';
+    uni.uploadFile({
+      url: `${BASE_URL}/upload/image`,
+      filePath,
+      name: 'file',
+      formData: { category },
+      header: { Authorization: token },
+      success: (res) => {
+        try {
+          const body = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+          if (body && body.code === 0) resolve(body.data);
+          else reject(new Error((body && body.message) || '上传失败'));
+        } catch (e) {
+          reject(new Error('上传响应解析失败'));
+        }
+      },
+      fail: (err) => reject(new Error((err && err.errMsg) || '上传失败'))
+    });
+  });
+}
+
 export function request({ url, method = 'GET', data }) {
   return new Promise((resolve, reject) => {
     const token = uni.getStorageSync('ycd_token') || '';

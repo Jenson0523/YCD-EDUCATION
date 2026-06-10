@@ -67,13 +67,21 @@
         <!-- 返校时间 -->
         <view class="field-group">
           <text class="field-label">预计返校时间</text>
-          <picker mode="dateTime" :value="form.leaveEnd" @change="e => form.leaveEnd = e.detail.value">
-            <view class="date-picker-btn">
-              <text class="dp-icon">🕐</text>
-              <text class="dp-text">{{ form.leaveEnd || '选择时间（选填）' }}</text>
-              <text class="dp-arrow">›</text>
-            </view>
-          </picker>
+          <view class="datetime-row">
+            <picker mode="date" :value="endDate" :start="todayStr" @change="e => endDate = e.detail.value">
+              <view class="date-picker-btn">
+                <text class="dp-icon">📅</text>
+                <text class="dp-text">{{ endDate || '选择日期' }}</text>
+              </view>
+            </picker>
+            <picker mode="time" :value="endTime" @change="e => endTime = e.detail.value">
+              <view class="date-picker-btn">
+                <text class="dp-icon">🕐</text>
+                <text class="dp-text">{{ endTime || '选择时间' }}</text>
+              </view>
+            </picker>
+          </view>
+          <text class="field-hint">选填，不填默认离校后8小时</text>
         </view>
 
         <!-- 备注 -->
@@ -99,14 +107,30 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { request } from '../../api/request';
 
 const loading = ref(false);
 const filling = ref(false);
+
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+const todayStr = formatDate(new Date());
+const endDate = ref('');
+const endTime = ref('');
+
 const form = reactive({
   studentNo: '', studentName: '', className: '', classId: null,
   leaveType: 'PERSONAL', reason: '', leaveEnd: '', approveRemark: ''
+});
+
+watch([endDate, endTime], () => {
+  form.leaveEnd = (endDate.value && endTime.value)
+    ? `${endDate.value} ${endTime.value}:00` : '';
 });
 
 const autoFill = async () => {
@@ -192,10 +216,13 @@ const submit = async () => {
 }
 .char-count { display: block; text-align: right; font-size: 20rpx; color: #CBD5E1; margin-top: 8rpx; }
 
-.date-picker-btn { display: flex; align-items: center; background: #fff; border: 1rpx solid #E2E8F0; border-radius: 16rpx; padding: 0 24rpx; height: 88rpx; box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03); }
-.dp-icon { font-size: 30rpx; margin-right: 16rpx; }
-.dp-text { flex: 1; font-size: 28rpx; color: #374151; }
+.datetime-row { display: flex; gap: 16rpx; }
+.datetime-row picker { flex: 1; }
+.date-picker-btn { display: flex; align-items: center; background: #fff; border: 1rpx solid #E2E8F0; border-radius: 16rpx; padding: 0 20rpx; height: 88rpx; box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03); }
+.dp-icon { font-size: 28rpx; margin-right: 12rpx; }
+.dp-text { flex: 1; font-size: 26rpx; color: #374151; }
 .dp-arrow { font-size: 40rpx; color: #CBD5E1; }
+.field-hint { display: block; font-size: 20rpx; color: #94A3B8; margin-top: 10rpx; }
 
 .submit-area { margin-top: 16rpx; }
 .submit-btn {
