@@ -59,3 +59,7 @@ backend/api/libs/
 arcsoft-local.yml
 backend/api/arcsoft-local.yml
 _t2/
+
+# 虹软ArcSoft激活生成的授权文件（机器绑定，勿提交）
+ArcFace64.dat
+backend/api/ArcFace64.dat
