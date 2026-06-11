@@ -54,3 +54,8 @@ _doc*.txt
 .workbuddy/
 _testimg/
 backend/api/libs/
+
+# 本地私密配置（人脸密钥等）
+arcsoft-local.yml
+backend/api/arcsoft-local.yml
+_t2/

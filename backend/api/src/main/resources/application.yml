@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: ycd-api
+  # 本地私密配置（人脸密钥等），文件已 gitignore，不会提交到仓库；不存在则忽略
+  config:
+    import: optional:file:./arcsoft-local.yml
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/ycd_education?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -59,6 +62,8 @@ face:
     threshold: 80.0
     fallback-threshold: 85.0
     arcsoft:
+      # 密钥不要写在这里（仓库公开）。请写入 backend/api/arcsoft-local.yml（已gitignore）
+      # 或设置环境变量 ARCSOFT_APP_ID / ARCSOFT_SDK_KEY
       app-id: ${ARCSOFT_APP_ID:}
       sdk-key: ${ARCSOFT_SDK_KEY:}
       lib-path: ${ARCSOFT_LIB_PATH:./libs/arcsoft}

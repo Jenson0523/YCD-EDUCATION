@@ -54,7 +54,10 @@ public class ArcSoftFaceEngine implements FaceRecognitionEngine {
             return;
         }
         try {
-            faceEngine = new FaceEngine(libPath);
+            // ArcSoft 要求传入 DLL/SO 目录的【绝对路径】，相对路径会报 UnsatisfiedLinkError
+            String absLibPath = new File(libPath).getAbsolutePath();
+            log.info("[ArcSoft] 加载native库目录: {}", absLibPath);
+            faceEngine = new FaceEngine(absLibPath);
             int active = faceEngine.activeOnline(appId, sdkKey);
             if (active != ErrorInfo.MOK.getValue() && active != ErrorInfo.MERR_ASF_ALREADY_ACTIVATED.getValue()) {
                 log.error("[ArcSoft] 激活失败 code={}，回退过渡引擎", active);
