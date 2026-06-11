@@ -12,21 +12,22 @@
           <view style="width:60rpx;"></view>
         </view>
         <view class="hero-stats">
-          <view class="stat-item">
+          <view class="stat-item" :class="{ 'stat-active': filter === 'all' }" @click="filter = 'all'">
             <text class="stat-num">{{ list.length }}</text>
             <text class="stat-label">今日总计</text>
           </view>
           <view class="stat-divider"></view>
-          <view class="stat-item">
+          <view class="stat-item" :class="{ 'stat-active': filter === 'departed' }" @click="filter = 'departed'">
             <text class="stat-num">{{ departed }}</text>
             <text class="stat-label">已离校</text>
           </view>
           <view class="stat-divider"></view>
-          <view class="stat-item">
-            <text class="stat-num">{{ pending }}</text>
+          <view class="stat-item" :class="{ 'stat-active': filter === 'pending' }" @click="filter = 'pending'">
+            <text class="stat-num stat-warn">{{ pending }}</text>
             <text class="stat-label">待离校</text>
           </view>
         </view>
+        <text class="filter-hint">点击上方统计可筛选 · 待离校项可直接刷脸放行</text>
       </view>
     </view>
 
@@ -38,14 +39,14 @@
           <view class="sk-line sk-w40 sk-short"></view>
         </view>
       </view>
-      <view v-else-if="list.length === 0" class="empty-state">
+      <view v-else-if="filteredList.length === 0" class="empty-state">
         <text class="empty-icon">📋</text>
-        <text class="empty-text">今日暂无有效假条</text>
-        <text class="empty-sub">所有学生均在校</text>
+        <text class="empty-text">{{ filter === 'pending' ? '没有待离校学生' : filter === 'departed' ? '暂无已离校记录' : '今日暂无有效假条' }}</text>
+        <text class="empty-sub">{{ filter === 'pending' ? '待离校学生均已核验放行' : '所有学生均在校' }}</text>
       </view>
       <view v-else class="leave-list">
         <view
-          v-for="item in list"
+          v-for="item in filteredList"
           :key="item.id"
           class="leave-card"
           :class="item.departAt ? 'card-departed' : 'card-pending'"
@@ -90,6 +91,13 @@
                 <text v-if="item.departAt" class="depart-time">离校 {{ fmtDt(item.departAt) }}</text>
               </view>
             </view>
+
+            <!-- 待离校：可直接刷脸放行 -->
+            <view v-if="!item.departAt" class="card-action" @click.stop="goVerify(item)">
+              <text class="ca-icon">🛂</text>
+              <text class="ca-text">刷脸放行</text>
+              <text class="ca-arrow">›</text>
+            </view>
           </view>
         </view>
       </view>
@@ -103,9 +111,15 @@ import { request } from '../../api/request';
 
 const list = ref([]);
 const loading = ref(true);
+const filter = ref('all'); // all / departed / pending
 
 const departed = computed(() => list.value.filter(i => i.departAt).length);
 const pending = computed(() => list.value.filter(i => !i.departAt).length);
+const filteredList = computed(() => {
+  if (filter.value === 'departed') return list.value.filter(i => i.departAt);
+  if (filter.value === 'pending') return list.value.filter(i => !i.departAt);
+  return list.value;
+});
 
 onMounted(async () => {
   try {
@@ -116,6 +130,8 @@ onMounted(async () => {
 });
 
 const goDetail = (id) => uni.navigateTo({ url: `/pages/leave/detail?id=${id}` });
+// 待离校学生 → 跳到刷脸核验页（门卫直接给该生刷脸放行）
+const goVerify = (item) => uni.navigateTo({ url: `/pages/gate/verify?studentNo=${item.studentNo || ''}` });
 const fmtDt = (dt) => {
   if (!dt) return '—';
   const s = dt.replace('T', ' ');
@@ -144,10 +160,13 @@ const fmtDt = (dt) => {
 .hero-title { flex: 1; text-align: center; font-size: 34rpx; font-weight: 700; color: #fff; letter-spacing: 2rpx; }
 
 .hero-stats { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.08); border-radius: 20rpx; padding: 24rpx 0; }
-.stat-item { flex: 1; text-align: center; }
+.stat-item { flex: 1; text-align: center; padding: 8rpx 0; border-radius: 14rpx; transition: background 0.2s; }
+.stat-active { background: rgba(255,255,255,0.14); }
 .stat-num { display: block; font-size: 44rpx; font-weight: 800; color: #fff; line-height: 1; }
+.stat-warn { color: #FFD66B; }
 .stat-label { display: block; font-size: 22rpx; color: rgba(200,210,255,0.6); margin-top: 8rpx; }
 .stat-divider { width: 1rpx; height: 60rpx; background: rgba(255,255,255,0.15); }
+.filter-hint { display: block; text-align: center; font-size: 20rpx; color: rgba(200,210,255,0.5); margin-top: 16rpx; }
 
 /* Body */
 .body { padding: 24rpx 28rpx; }
@@ -195,4 +214,11 @@ const fmtDt = (dt) => {
 .ft-right { display: flex; align-items: center; gap: 12rpx; }
 .sig-tag { font-size: 20rpx; color: #6366f1; background: #EEF2FF; padding: 4rpx 12rpx; border-radius: 20rpx; }
 .depart-time { font-size: 20rpx; color: #9CA3AF; }
+
+/* 刷脸放行按钮 */
+.card-action { display: flex; align-items: center; gap: 10rpx; margin-top: 16rpx; padding: 18rpx 24rpx;
+  background: linear-gradient(135deg, #1947C8, #2B7FFF); border-radius: 14rpx; }
+.ca-icon { font-size: 30rpx; }
+.ca-text { flex: 1; font-size: 28rpx; font-weight: 700; color: #fff; letter-spacing: 2rpx; }
+.ca-arrow { font-size: 36rpx; color: rgba(255,255,255,0.7); }
 </style>

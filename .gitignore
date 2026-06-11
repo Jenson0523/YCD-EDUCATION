@@ -52,3 +52,5 @@ uploads/
 # 个人临时文档与工具目录
 _doc*.txt
 .workbuddy/
+_testimg/
+backend/api/libs/

@@ -48,13 +48,17 @@ sa-token:
 knife4j:
   enable: true
 
-# 人脸识别配置（mock=模拟模式 / tencent=腾讯云API）
+# 人脸识别配置
+#   provider=arcsoft : 优先用虹软离线SDK（需安装SDK+填app-id/sdk-key，见 docs/ARCSOFT_SETUP.md）
+#                      未安装时自动回退到"图像相似度过渡引擎"（真实图像比对，杜绝随机照片误判）
+#   threshold        : 真实人脸引擎(ArcSoft)通过阈值（同一人置信度，建议80）
+#   fallback-threshold: 过渡图像引擎通过阈值（更严格，建议85，降低误判）
 face:
   api:
-    provider: mock
+    provider: arcsoft
     threshold: 80.0
-    tencent:
-      secret-id:
-      secret-key:
-      region: ap-guangzhou
-      group-id: ycd-students
+    fallback-threshold: 85.0
+    arcsoft:
+      app-id: ${ARCSOFT_APP_ID:}
+      sdk-key: ${ARCSOFT_SDK_KEY:}
+      lib-path: ${ARCSOFT_LIB_PATH:./libs/arcsoft}

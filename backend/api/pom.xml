@@ -121,4 +121,55 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          虹软 ArcSoft 离线人脸引擎 profile。
+          当 backend/api/libs/arcsoft-sdk-face.jar 存在时自动激活：
+            · 引入 SDK jar（system 范围）
+            · 把 src/arcsoft/java 加入编译（ArcSoftFaceEngine）
+          未安装 SDK 时本 profile 不激活，主工程正常编译，系统回退图像过渡引擎。
+          安装步骤见 docs/ARCSOFT_SETUP.md
+        -->
+        <profile>
+            <id>arcsoft</id>
+            <activation>
+                <file>
+                    <exists>${project.basedir}/libs/arcsoft-sdk-face.jar</exists>
+                </file>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.arcsoft.face</groupId>
+                    <artifactId>arcsoft-sdk-face</artifactId>
+                    <version>3.0.0.0</version>
+                    <scope>system</scope>
+                    <systemPath>${project.basedir}/libs/arcsoft-sdk-face.jar</systemPath>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-arcsoft-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/arcsoft/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

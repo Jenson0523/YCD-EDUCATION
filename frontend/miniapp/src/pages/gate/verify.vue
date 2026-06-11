@@ -18,6 +18,12 @@
     </view>
 
     <scroll-view scroll-y class="scroll">
+      <!-- 目标学生提示（从今日假条带入） -->
+      <view v-if="targetStudentNo && !result" class="target-banner">
+        <text class="tb-icon">🎯</text>
+        <text class="tb-text">正在为学籍号 {{ targetStudentNo }} 刷脸放行，请采集该生面部</text>
+      </view>
+
       <!-- 扫描区 -->
       <view class="scan-section">
         <view class="scan-frame" :class="scanState">
@@ -220,11 +226,16 @@ const resultTitle = computed(() => {
 const resolvePhoto = (u) => assetUrl(u) || '/static/avatar-default.png';
 const fmtDt = (dt) => dt ? String(dt).replace('T', ' ').slice(5, 16) : '—';
 
+const targetStudentNo = ref(''); // 从今日假条"刷脸放行"带入的目标学生
+
 onMounted(() => {
   try {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : uni.getSystemInfoSync();
     statusBarH.value = info.statusBarHeight || 20;
   } catch {}
+  const pages = getCurrentPages();
+  const opts = pages[pages.length - 1]?.options || {};
+  if (opts.studentNo) targetStudentNo.value = decodeURIComponent(opts.studentNo);
 });
 
 const startScan = () => {
@@ -251,8 +262,13 @@ const startScan = () => {
         await new Promise(r => setTimeout(r, 1200));
         candidates.value = list || [];
         scanned.value = true;
+        // 若带了目标学生且识别结果中有该生，自动锁定（提升门卫效率）
+        if (targetStudentNo.value && candidates.value.length) {
+          const hit = candidates.value.find(c => c.studentNo === targetStudentNo.value);
+          if (hit) { await pickCandidate(hit); }
+        }
         if (!candidates.value.length) {
-          uni.showToast({ title: '今日所有学生均已核验离校', icon: 'none' });
+          uni.showToast({ title: '未识别到匹配学生，请重试或核对照片', icon: 'none' });
         }
       } catch (e) {
         uni.showToast({ title: e.message || '识别失败', icon: 'none' });
@@ -390,6 +406,12 @@ const goLeaveDetail = () => {
 .hd-sub { display: block; font-size: 20rpx; color: rgba(0,229,255,0.6); margin-top: 4rpx; font-family: 'Courier New', monospace; }
 .hd-action { padding: 0 24rpx; height: 64rpx; line-height: 64rpx; font-size: 24rpx; color: #00E5FF;
   background: rgba(0,229,255,0.08); border: 1rpx solid rgba(0,229,255,0.3); border-radius: 12rpx; }
+
+/* 目标学生提示 */
+.target-banner { display: flex; align-items: center; gap: 12rpx; margin: 8rpx 40rpx 0; padding: 18rpx 24rpx;
+  background: rgba(0,229,255,0.08); border: 1rpx solid rgba(0,229,255,0.3); border-radius: 14rpx; }
+.tb-icon { font-size: 28rpx; }
+.tb-text { flex: 1; font-size: 24rpx; color: #00E5FF; }
 
 /* 扫描区 */
 .scan-section { display: flex; flex-direction: column; align-items: center; padding: 24rpx 40rpx 0; }

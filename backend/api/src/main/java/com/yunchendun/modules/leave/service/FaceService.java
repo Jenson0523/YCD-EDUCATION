@@ -5,62 +5,70 @@ import com.yunchendun.modules.leave.domain.FaceRecord;
 import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestTemplate;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+import java.io.File;
+import java.nio.file.Paths;
 import java.util.*;
 
 /**
- * 人脸识别服务
- * 支持腾讯云人脸识别 API（真机对比）与 Mock 模式（开发调试用）
+ * 人脸识别服务（门卫核验）。
+ *
+ * 引擎策略（按优先级自动择优）：
+ *   1. 虹软 ArcSoft 离线SDK（face.api.provider=arcsoft 且激活成功）— 生产精准引擎
+ *   2. 图像相似度过渡引擎（ImageHashFaceEngine）— 无需凭证，真实图像比对
+ *
+ * 关键点：分数来自对"实际上传照片"的真实比对，不再是与照片无关的假分数，
+ *        从根本上杜绝"随便一张照片都能高分匹配"。
  */
 @Slf4j
 @Service
 public class FaceService {
 
-    @Value("${face.api.provider:mock}")
+    @Value("${app.upload.dir:./uploads}")
+    private String uploadDir;
+
+    @Value("${face.api.provider:image}")
     private String provider;
 
-    @Value("${face.api.tencent.secret-id:}")
-    private String secretId;
-
-    @Value("${face.api.tencent.secret-key:}")
-    private String secretKey;
-
-    @Value("${face.api.tencent.region:ap-guangzhou}")
-    private String region;
-
-    @Value("${face.api.tencent.group-id:ycd-students}")
-    private String groupId;
-
+    /** ArcSoft 等真实人脸引擎的通过阈值（同一个人置信度） */
     @Value("${face.api.threshold:80.0}")
     private double threshold;
 
-    private final RestTemplate restTemplate;
+    /** 过渡图像引擎的通过阈值（更严格，降低误判） */
+    @Value("${face.api.fallback-threshold:85.0}")
+    private double fallbackThreshold;
+
     private final FaceRecordMapper faceRecordMapper;
+    private final List<FaceRecognitionEngine> engines;
 
-    private static final String HOST = "iai.tencentcloudapi.com";
-    private static final String SERVICE = "iai";
-    private static final String VERSION = "2020-03-03";
-
-    public FaceService(RestTemplateBuilder builder, FaceRecordMapper faceRecordMapper) {
-        this.restTemplate = builder.build();
+    public FaceService(FaceRecordMapper faceRecordMapper, List<FaceRecognitionEngine> engines) {
         this.faceRecordMapper = faceRecordMapper;
+        this.engines = engines;
+    }
+
+    /** 选出当前应使用的引擎：优先 ArcSoft（就绪），否则过渡引擎 */
+    private FaceRecognitionEngine engine() {
+        FaceRecognitionEngine fallback = null;
+        for (FaceRecognitionEngine e : engines) {
+            if ("arcsoft".equalsIgnoreCase(provider) && e.name().startsWith("arcsoft") && e.isReady()) {
+                return e;
+            }
+            if (e.name().startsWith("image-hash")) fallback = e;
+        }
+        if (fallback != null) return fallback;
+        return engines.isEmpty() ? null : engines.get(0);
+    }
+
+    /** 当前引擎对应的通过阈值 */
+    private double activeThreshold(FaceRecognitionEngine e) {
+        return e != null && e.name().startsWith("image-hash") ? fallbackThreshold : threshold;
     }
 
     // ═══ 对外接口 ═══
 
-    /** 1:1 人脸比对（门卫核验） */
+    /** 1:1 人脸比对（核验指定学籍号 vs 抓拍照片） */
     public Map<String, Object> compare(String studentNo, String capturePhotoUrl) {
         FaceRecord rec = faceRecordMapper.selectOne(
                 new LambdaQueryWrapper<FaceRecord>()
@@ -68,135 +76,68 @@ public class FaceService {
                         .eq(FaceRecord::getStatus, "ACTIVE"));
         if (rec == null || !StringUtils.hasText(rec.getFacePhotoUrl())) {
             return Map.of("score", 0.0, "passed", false, "studentId", 0L,
-                    "realName", "", "facePhotoUrl", "", "message", "人脸档案不存在");
+                    "realName", "", "facePhotoUrl", "", "message", "人脸档案不存在或未录入照片");
         }
 
-        double score;
-        if ("tencent".equalsIgnoreCase(provider) && StringUtils.hasText(secretId)) {
-            score = tencentCompareFaces(rec.getFacePhotoUrl(), capturePhotoUrl);
-        } else {
-            score = mockCompare(rec);
+        File enrolled = resolveImageFile(rec.getFacePhotoUrl());
+        File captured = resolveImageFile(capturePhotoUrl);
+        if (enrolled == null) {
+            return Map.of("score", 0.0, "passed", false, "studentId",
+                    rec.getStudentId() != null ? rec.getStudentId() : 0L,
+                    "realName", rec.getRealName() != null ? rec.getRealName() : "",
+                    "facePhotoUrl", rec.getFacePhotoUrl(), "message", "档案照片文件缺失");
+        }
+        if (captured == null) {
+            return Map.of("score", 0.0, "passed", false, "studentId",
+                    rec.getStudentId() != null ? rec.getStudentId() : 0L,
+                    "realName", rec.getRealName() != null ? rec.getRealName() : "",
+                    "facePhotoUrl", rec.getFacePhotoUrl(), "message", "抓拍照片缺失，请重新刷脸");
         }
 
-        boolean passed = score >= threshold;
-        return Map.of(
-                "score", Math.round(score * 10.0) / 10.0,
-                "passed", passed,
-                "studentId", rec.getStudentId() != null ? rec.getStudentId() : 0L,
-                "realName", rec.getRealName() != null ? rec.getRealName() : "",
-                "facePhotoUrl", rec.getFacePhotoUrl(),
-                "message", passed ? "人脸比对通过" : "人脸比对不匹配（" + score + "分）"
-        );
+        FaceRecognitionEngine eng = engine();
+        double score = eng == null ? 0.0 : eng.compareImages(enrolled, captured);
+        double th = activeThreshold(eng);
+        boolean passed = score >= th;
+
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("score", Math.round(score * 10.0) / 10.0);
+        r.put("passed", passed);
+        r.put("threshold", th);
+        r.put("engine", eng == null ? "none" : eng.name());
+        r.put("studentId", rec.getStudentId() != null ? rec.getStudentId() : 0L);
+        r.put("realName", rec.getRealName() != null ? rec.getRealName() : "");
+        r.put("facePhotoUrl", rec.getFacePhotoUrl());
+        r.put("message", passed ? "人脸比对通过" : "人脸比对不匹配（" + Math.round(score * 10.0) / 10.0 + "分 < " + th + "）");
+        return r;
     }
 
-    /** 1:N 人脸检索（门卫刷脸识别） */
+    /** 1:N 人脸检索（门卫刷脸：在人脸库中找出与抓拍照片匹配的学生） */
     public List<Map<String, Object>> recognize(List<FaceRecord> library, String capturePhotoUrl) {
         if (library == null || library.isEmpty()) return Collections.emptyList();
 
-        if ("tencent".equalsIgnoreCase(provider) && StringUtils.hasText(secretId)) {
-            // TODO: 真实 API 使用 capturePhotoUrl 进行 1:N 搜索，目前暂回退到 mock
-            return mockRecognize(library);
+        File captured = resolveImageFile(capturePhotoUrl);
+        FaceRecognitionEngine eng = engine();
+        if (captured == null || eng == null) {
+            log.warn("刷脸识别：抓拍照片缺失或无可用引擎，captured={}, engine={}", captured, eng);
+            return Collections.emptyList();
         }
-        return mockRecognize(library);
-    }
+        double th = activeThreshold(eng);
 
-    // ═══ 腾讯云 API 调用 ═══
-
-    private double tencentCompareFaces(String imageUrlA, String imageUrlB) {
-        try {
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("UrlA", imageUrlA);
-            payload.put("UrlB", imageUrlB);
-            payload.put("QualityControl", 2); // 中等质量控制
-
-            Map<?, ?> res = callTencentApi("CompareFace", payload);
-            if (res != null && res.containsKey("Response")) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> response = (Map<String, Object>) res.get("Response");
-                Object scoreObj = response.get("Score");
-                if (scoreObj instanceof Number) {
-                    return ((Number) scoreObj).doubleValue();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("腾讯云 CompareFace 调用失败，回退到 mock: {}", e.getMessage());
+        // 提取一次抓拍特征
+        byte[] capFeature = eng.extractFeature(captured);
+        if (capFeature == null) {
+            log.warn("刷脸识别：抓拍照片未能提取特征（可能未检测到人脸）");
+            return Collections.emptyList();
         }
-        // 回退：从数据库查人脸档案做 mock
-        return 82.0 + Math.random() * 10;
-    }
 
-    @SuppressWarnings("unchecked")
-    private Map<?, ?> callTencentApi(String action, Map<String, Object> payload) throws Exception {
-        String jsonBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
-        String timestamp = String.valueOf(ZonedDateTime.now(ZoneOffset.UTC).toEpochSecond());
-        String date = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-
-        // TC3-HMAC-SHA256 签名
-        String authorization = signTc3(secretId, secretKey, SERVICE, HOST, action, VERSION, region, jsonBody, timestamp, date);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Host", HOST);
-        headers.set("X-TC-Action", action);
-        headers.set("X-TC-Version", VERSION);
-        headers.set("X-TC-Timestamp", timestamp);
-        headers.set("X-TC-Region", region);
-        headers.set("Authorization", authorization);
-
-        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-        ResponseEntity<Map> response = restTemplate.exchange(
-                "https://" + HOST, HttpMethod.POST, entity, Map.class);
-        return response.getBody();
-    }
-
-    private String signTc3(String secretId, String secretKey, String service, String host,
-                           String action, String version, String region, String payload,
-                           String timestamp, String date) throws Exception {
-        // Step 1: Canonical Request
-        String canonicalHeaders = "content-type:application/json; charset=utf-8\n"
-                + "host:" + host + "\n"
-                + "x-tc-action:" + action.toLowerCase() + "\n";
-        String signedHeaders = "content-type;host;x-tc-action";
-        String hashedPayload = sha256Hex(payload);
-        String canonicalRequest = "POST\n/\n\n" + canonicalHeaders + "\n" + signedHeaders + "\n" + hashedPayload;
-
-        // Step 2: String to Sign
-        String credentialScope = date + "/" + service + "/tc3_request";
-        String hashedCanonical = sha256Hex(canonicalRequest);
-        String stringToSign = "TC3-HMAC-SHA256\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonical;
-
-        // Step 3: Signature
-        byte[] secretDate = hmacSha256(("TC3" + secretKey).getBytes(StandardCharsets.UTF_8), date);
-        byte[] secretService = hmacSha256(secretDate, service);
-        byte[] secretSigning = hmacSha256(secretService, "tc3_request");
-        byte[] signature = hmacSha256(secretSigning, stringToSign);
-
-        return "TC3-HMAC-SHA256 Credential=" + secretId + "/" + credentialScope
-                + ", SignedHeaders=" + signedHeaders
-                + ", Signature=" + bytesToHex(signature);
-    }
-
-    // ═══ Mock 实现（开发/调试用，基于学籍号哈希保证一致性） ═══
-
-    private double mockCompare(FaceRecord rec) {
-        // 基于 studentNo 生成伪随机但稳定的基础分（模拟真实比对）
-        String seed = rec.getStudentNo() + rec.getUpdatedAt().toString();
-        int hash = Math.abs(seed.hashCode());
-        double base = 78.0 + (hash % 20); // 78 ~ 97
-        // 加上少量噪声（±3分），模拟光照/角度影响
-        double noise = (Math.random() - 0.5) * 6;
-        return Math.min(99.9, Math.max(0, base + noise));
-    }
-
-    private List<Map<String, Object>> mockRecognize(List<FaceRecord> lib) {
         List<Map<String, Object>> candidates = new ArrayList<>();
-        int idx = 0;
-        for (FaceRecord r : lib) {
-            String seed = r.getStudentNo() + r.getUpdatedAt().toString();
-            double base = 85.0 + (Math.abs(seed.hashCode()) % 14); // 85 ~ 98
-            double noise = (Math.random() - 0.5) * 4;
-            double score = Math.round((base + noise) * 10.0) / 10.0;
-            if (score < 70) continue; // 低于阈值不展示
+        for (FaceRecord r : library) {
+            File enrolled = resolveImageFile(r.getFacePhotoUrl());
+            if (enrolled == null) continue;
+            byte[] enrFeature = eng.extractFeature(enrolled);
+            if (enrFeature == null) continue;
+            double score = eng.compareFeature(capFeature, enrFeature);
+            if (score < th) continue; // 低于阈值不作为候选，杜绝误判
 
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("studentId", r.getStudentId());
@@ -206,35 +147,44 @@ public class FaceService {
             m.put("gradeName", r.getGradeName());
             m.put("headTeacherName", r.getHeadTeacherName());
             m.put("facePhotoUrl", r.getFacePhotoUrl());
-            m.put("score", score);
+            m.put("score", Math.round(score * 10.0) / 10.0);
             candidates.add(m);
-            idx++;
-            if (idx >= 5) break;
         }
-        // 按分数降序
+        // 按分数降序，取 Top-5
         candidates.sort((a, b) -> Double.compare((Double) b.get("score"), (Double) a.get("score")));
-        return candidates;
+        return candidates.size() > 5 ? candidates.subList(0, 5) : candidates;
     }
 
-    // ═══ 加密工具 ═══
-
-    private static String sha256Hex(String input) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-        return bytesToHex(hash);
+    /** 当前引擎信息（供前端/调试展示） */
+    public Map<String, Object> engineInfo() {
+        FaceRecognitionEngine eng = engine();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("provider", provider);
+        m.put("engine", eng == null ? "none" : eng.name());
+        m.put("ready", eng != null && eng.isReady());
+        m.put("threshold", activeThreshold(eng));
+        return m;
     }
 
-    private static byte[] hmacSha256(byte[] key, String data) throws Exception {
-        Mac mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec(key, "HmacSHA256"));
-        return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-    }
+    // ═══ 工具 ═══
 
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b & 0xff));
+    /** 将 /uploads/xxx 的访问URL解析为本地文件 */
+    private File resolveImageFile(String url) {
+        if (!StringUtils.hasText(url)) return null;
+        String rel = url;
+        int idx = rel.indexOf("/uploads/");
+        if (idx >= 0) {
+            rel = rel.substring(idx + "/uploads/".length());
+        } else if (rel.startsWith("http")) {
+            return null; // 外链不处理
+        } else if (rel.startsWith("/")) {
+            rel = rel.substring(1);
         }
-        return sb.toString();
+        try {
+            File f = Paths.get(uploadDir, rel).toAbsolutePath().normalize().toFile();
+            return f.exists() && f.isFile() ? f : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

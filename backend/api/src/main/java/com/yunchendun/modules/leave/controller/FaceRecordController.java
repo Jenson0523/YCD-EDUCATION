@@ -155,6 +155,13 @@ public class FaceRecordController {
         return ApiResponse.ok(faceService.compare(studentNo, capturePhotoUrl));
     }
 
+    /** 当前人脸引擎信息（虹软离线 / 图像过渡引擎，便于排查精准度） */
+    @Operation(summary = "当前人脸引擎信息")
+    @GetMapping("/engine-info")
+    public ApiResponse<Map<String, Object>> engineInfo() {
+        return ApiResponse.ok(faceService.engineInfo());
+    }
+
     /**
      * 刷脸识别：上传抓拍照片，在人脸库中检索匹配学生（门卫端免输入学籍号）。
      * 由 FaceService 统一处理（真实 API 或 Mock），返回 Top-5 候选人（降序）。
