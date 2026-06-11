@@ -12,6 +12,7 @@ import com.yunchendun.modules.leave.domain.LeaveApplication;
 import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
 import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
 import com.yunchendun.modules.leave.mapper.LeaveApplicationMapper;
+import com.yunchendun.modules.leave.service.FaceService;
 import com.yunchendun.modules.student.domain.Student;
 import com.yunchendun.modules.student.mapper.StudentMapper;
 import com.yunchendun.system.domain.SysMessage;
@@ -42,32 +43,36 @@ public class GateVerificationController {
     private final GateVerificationMapper verifyMapper;
     private final LeaveApplicationMapper leaveMapper;
     private final FaceRecordMapper faceRecordMapper;
+    private final FaceService faceService;
     private final StudentMapper studentMapper;
     private final SysMessageMapper messageMapper;
     private final DataPermissionHelper dataPermissionHelper;
 
     /**
-     * 执行人脸核验离校
-     * 前端传入：studentNo, capturePhotoUrl, faceMatchScore, verifyType(DEPART/RETURN)
+     * 执行人脸核验离校（服务端人脸比对 + 假条校验）
+     * 前端传入：studentNo, capturePhotoUrl, verifyType(DEPART/RETURN)
      * 后端执行：
-     *   1. 查找当日有效假条
-     *   2. 综合判断：人脸分 + 假条存在 = 双重校验
-     *   3. 记录核验日志
-     *   4. 通过则更新假条状态为 DEPARTED
+     *   1. FaceService 1:1 对比（真实API或Mock）
+     *   2. 查找当日有效假条
+     *   3. 综合判断：人脸分 + 假条存在 = 双重校验
+     *   4. 记录核验日志
+     *   5. 通过则更新假条状态为 DEPARTED
      */
     @Operation(summary = "执行人脸核验")
     @PostMapping("/verify")
     public ApiResponse<Map<String, Object>> verify(@RequestBody Map<String, Object> body) {
         String studentNo = (String) body.get("studentNo");
         String capturePhotoUrl = (String) body.get("capturePhotoUrl");
-        double faceScore = body.get("faceMatchScore") != null
-                ? Double.parseDouble(body.get("faceMatchScore").toString()) : 0.0;
         String verifyType = body.getOrDefault("verifyType", "DEPART").toString();
         Long verifierId = StpUtil.getLoginIdAsLong();
-        double threshold = 80.0;
-        boolean faceOk = faceScore >= threshold;
 
-        // 查找今日有效假条（已审批且未离校）
+        // 服务端执行人脸比对（不再信任客户端分数）
+        Map<String, Object> faceResult = faceService.compare(studentNo, capturePhotoUrl);
+        double faceScore = faceResult.get("score") instanceof Number
+                ? ((Number) faceResult.get("score")).doubleValue() : 0.0;
+        boolean faceOk = (boolean) faceResult.getOrDefault("passed", false);
+
+        // 查找当日有效假条（已审批且未离校）
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LeaveApplication leave = leaveMapper.selectOne(
                 new LambdaQueryWrapper<LeaveApplication>()
@@ -128,11 +133,27 @@ public class GateVerificationController {
         log.setTenantId(1L);
         verifyMapper.insert(log);
 
-        // 通过则更新假条状态
+        // 构建返回结果
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("result", result);
+        resp.put("message", resultMsg);
+        resp.put("faceScore", faceScore);
+        resp.put("studentName", studentName);
+        resp.put("studentNo", studentNo);
+
+        // 通过则更新假条状态 + 返回详细假条信息
         if ("PASS".equals(result) && leave != null) {
             leave.setStatus("DEPARTED");
             leave.setDepartAt(LocalDateTime.now());
             leaveMapper.updateById(leave);
+
+            resp.put("leaveNo", leave.getLeaveNo());
+            resp.put("leaveId", leave.getId());
+            resp.put("leaveType", leave.getLeaveType());
+            resp.put("leaveStart", leave.getLeaveStart() != null ? leave.getLeaveStart().toString() : "");
+            resp.put("leaveEnd", leave.getLeaveEnd() != null ? leave.getLeaveEnd().toString() : "");
+            resp.put("reason", leave.getReason() != null ? leave.getReason() : "");
+            resp.put("className", leave.getClassName() != null ? leave.getClassName() : "");
 
             // 推送离校通知给家长
             SysMessage msg = new SysMessage();
@@ -160,13 +181,39 @@ public class GateVerificationController {
             messageMapper.insert(warn);
         }
 
-        return ApiResponse.ok(Map.of(
-                "result", result,
-                "message", resultMsg,
-                "faceScore", faceScore,
-                "leaveNo", leave != null ? leave.getLeaveNo() : "",
-                "studentName", leave != null ? leave.getStudentName() : ""
-        ));
+        return ApiResponse.ok(resp);
+    }
+
+    /**
+     * 核验前预检：查询某学生当日是否有有效假条（已批准/临时待补且未离校）。
+     * 门卫端刷脸锁定身份后调用，用于决定显示"确认放行"还是"临时放行"。
+     * 返回：{ hasLeave, leaveId, leaveNo, leaveType, leaveStart, leaveEnd, reason, status }
+     */
+    @Operation(summary = "核验前预检学生假条")
+    @GetMapping("/check")
+    public ApiResponse<Map<String, Object>> check(@RequestParam String studentNo) {
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LeaveApplication leave = leaveMapper.selectOne(
+                new LambdaQueryWrapper<LeaveApplication>()
+                        .eq(LeaveApplication::getStudentNo, studentNo)
+                        .in(LeaveApplication::getStatus, "APPROVED", "TEMP_PENDING")
+                        .ge(LeaveApplication::getLeaveStart, startOfDay)
+                        .isNull(LeaveApplication::getDepartAt)
+                        .orderByAsc(LeaveApplication::getLeaveStart)
+                        .last("LIMIT 1"));
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("hasLeave", leave != null);
+        if (leave != null) {
+            resp.put("leaveId", leave.getId());
+            resp.put("leaveNo", leave.getLeaveNo());
+            resp.put("leaveType", "SICK".equals(leave.getLeaveType()) ? "病假"
+                    : "PERSONAL".equals(leave.getLeaveType()) ? "事假" : leave.getLeaveType());
+            resp.put("leaveStart", leave.getLeaveStart() != null ? leave.getLeaveStart().toString() : "");
+            resp.put("leaveEnd", leave.getLeaveEnd() != null ? leave.getLeaveEnd().toString() : "");
+            resp.put("reason", leave.getReason() != null ? leave.getReason() : "");
+            resp.put("status", leave.getStatus());
+        }
+        return ApiResponse.ok(resp);
     }
 
     /** 今日核验记录（门卫端） */

@@ -229,6 +229,16 @@
             <view class="fe-reupload" @click="enrollFace">重新录入</view>
           </view>
 
+          <!-- 已暂存（拍照了但未提交） -->
+          <view v-else-if="faceStatus === 'temp'" class="face-enrolled" style="background: linear-gradient(135deg, #FFF7ED, #FFEDD5); border-color: #FB923C;">
+            <image :src="facePhotoUrl" class="fe-photo" mode="aspectFill" />
+            <view class="fe-info">
+              <text class="fe-ok" style="color: #EA580C;">📷 照片已暂存</text>
+              <text class="fe-sub" style="color: #FB923C;">确认请假后将正式录入人脸档案</text>
+            </view>
+            <view class="fe-reupload" style="color: #EA580C;" @click="enrollFace">重拍</view>
+          </view>
+
           <!-- 未录入：需上传 -->
           <view v-else-if="faceStatus === 'none'" class="face-enroll-area">
             <view class="face-upload-box" @click="enrollFace">
@@ -354,6 +364,7 @@ const pickStudent = (s) => {
   form.studentId = s.studentId;
   form.studentName = s.studentName;
   form.studentNo = s.studentNo || '';
+  form.classId = s.classId || null;
   form.className = s.className || '';
   searchResults.value = [];
   searchKw.value = '';
@@ -420,34 +431,23 @@ const choosePhoto = () => {
   });
 };
 
-// 录入人脸（拍照上传 + 写入档案）
+// 录入人脸（拍照上传到临时存储，确认请假后才正式写入档案）
 const enrollFace = () => {
   if (!form.studentId) return;
   uni.chooseImage({
     count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'],
     success: async (res) => {
       const tempPath = res.tempFilePaths[0];
-      uni.showLoading({ title: '录入人脸中…' });
+      uni.showLoading({ title: '上传照片中…' });
       try {
         const up = await uploadFile(tempPath, 'face');
-        // 写入/更新人脸档案
-        await request({
-          url: '/leave/face', method: 'POST',
-          data: {
-            studentId: form.studentId,
-            studentNo: form.studentNo,
-            realName: form.studentName,
-            classId: form.classId,
-            className: form.className,
-            facePhotoUrl: up.url
-          }
-        });
+        // 暂存：只存URL到表单，不写入 face_record
         form.facePhotoUrl = up.url;
         facePhotoUrl.value = assetUrl(up.url);
-        faceStatus.value = 'has';
-        uni.showToast({ title: '✓ 人脸录入成功', icon: 'none' });
+        faceStatus.value = 'temp'; // 临时状态：已拍照但未提交
+        uni.showToast({ title: '✓ 照片已暂存，确认请假后正式录入', icon: 'none', duration: 2000 });
       } catch (e) {
-        uni.showToast({ title: e.message || '人脸录入失败', icon: 'none' });
+        uni.showToast({ title: e.message || '上传失败', icon: 'none' });
       } finally {
         uni.hideLoading();
       }
@@ -460,7 +460,11 @@ const submit = async () => {
   if (!form.reason.trim()) { uni.showToast({ title: '请填写请假原因', icon: 'none' }); return; }
   if (!form.leaveStart) { uni.showToast({ title: '请选择完整的离校日期和时间', icon: 'none' }); return; }
   if (!form.leaveEnd) { uni.showToast({ title: '请选择完整的返校日期和时间', icon: 'none' }); return; }
-  if (faceStatus.value !== 'has' || !form.facePhotoUrl) {
+  if (faceStatus.value !== 'has' && faceStatus.value !== 'temp') {
+    uni.showToast({ title: '请先为学生录入人脸（门卫核验离校必需）', icon: 'none', duration: 2500 });
+    return;
+  }
+  if (!form.facePhotoUrl) {
     uni.showToast({ title: '请先为学生录入人脸（门卫核验离校必需）', icon: 'none', duration: 2500 });
     return;
   }

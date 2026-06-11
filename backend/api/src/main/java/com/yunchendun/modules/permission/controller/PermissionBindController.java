@@ -150,16 +150,28 @@ public class PermissionBindController {
         List<Map<String, Object>> result = new ArrayList<>();
 
         if (dp.isSelf()) {
-            // 家长/学生：仅绑定孩子
+            // 家长/学生：仅绑定孩子，补充班级年级信息
             List<ParentStudent> binds = parentStudentMapper.selectList(
                     new LambdaQueryWrapper<ParentStudent>()
                             .eq(ParentStudent::getParentUserId, uid));
             for (ParentStudent b : binds) {
+                String cn = "", gn = "";
+                Long cid = null;
+                if (b.getStudentId() != null) {
+                    Student stu = studentMapper.selectById(b.getStudentId());
+                    if (stu != null) {
+                        cn = stu.getClassName() == null ? "" : stu.getClassName();
+                        gn = stu.getGradeName() == null ? "" : stu.getGradeName();
+                        cid = stu.getClassId();
+                    }
+                }
                 result.add(Map.of(
                         "studentId", b.getStudentId(),
                         "studentName", b.getStudentName() == null ? "" : b.getStudentName(),
                         "studentNo", b.getStudentNo() == null ? "" : b.getStudentNo(),
-                        "className", ""
+                        "classId", cid != null ? cid : "",
+                        "className", cn,
+                        "gradeName", gn
                 ));
             }
             return ApiResponse.ok(result);
@@ -185,7 +197,9 @@ public class PermissionBindController {
                     "studentId", s.getId(),
                     "studentName", s.getName() == null ? "" : s.getName(),
                     "studentNo", s.getStudentNo() == null ? "" : s.getStudentNo(),
-                    "className", s.getClassName() == null ? "" : s.getClassName()
+                    "classId", s.getClassId() != null ? s.getClassId() : "",
+                    "className", s.getClassName() == null ? "" : s.getClassName(),
+                    "gradeName", s.getGradeName() == null ? "" : s.getGradeName()
             ));
         }
         return ApiResponse.ok(result);

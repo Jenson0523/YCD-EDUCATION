@@ -19,6 +19,8 @@ public class FaceRecord {
     private String realName;
     private Long classId;
     private String className;
+    private String gradeName;
+    private String headTeacherName;
     private String facePhotoUrl;
     /** 预留：人脸特征码（硬件同步用） */
     private String faceFeature;

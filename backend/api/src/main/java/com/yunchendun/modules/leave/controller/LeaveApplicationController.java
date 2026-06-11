@@ -6,14 +6,22 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
 import com.yunchendun.common.security.DataPermission;
 import com.yunchendun.common.security.DataPermissionHelper;
+import com.yunchendun.modules.leave.domain.FaceRecord;
+import com.yunchendun.modules.leave.domain.GateVerification;
 import com.yunchendun.modules.leave.domain.LeaveApplication;
 import com.yunchendun.modules.leave.domain.TempSupplementOrder;
+import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
+import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
 import com.yunchendun.modules.leave.mapper.LeaveApplicationMapper;
 import com.yunchendun.modules.leave.mapper.TempSupplementOrderMapper;
 import com.yunchendun.modules.permission.domain.TeacherClass;
 import com.yunchendun.modules.permission.mapper.TeacherClassMapper;
+import com.yunchendun.modules.student.domain.Student;
+import com.yunchendun.modules.student.mapper.StudentMapper;
 import com.yunchendun.system.domain.SysMessage;
+import com.yunchendun.system.domain.SysUser;
 import com.yunchendun.system.mapper.SysMessageMapper;
+import com.yunchendun.system.mapper.SysUserMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -38,9 +46,13 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LeaveApplicationController {
 
     private final LeaveApplicationMapper leaveMapper;
+    private final FaceRecordMapper faceRecordMapper;
     private final TempSupplementOrderMapper supplementMapper;
     private final SysMessageMapper messageMapper;
+    private final GateVerificationMapper gateVerificationMapper;
+    private final SysUserMapper sysUserMapper;
     private final TeacherClassMapper teacherClassMapper;
+    private final StudentMapper studentMapper;
     private final DataPermissionHelper dataPermissionHelper;
 
     private static final AtomicLong SEQ = new AtomicLong(System.currentTimeMillis() % 10000);
@@ -72,9 +84,20 @@ public class LeaveApplicationController {
         // 数据权限过滤
         DataPermission dp = dataPermissionHelper.current();
         if (dp.isClass()) {
-            // 班主任/任课老师：仅本人关联班级
-            if (dp.hasNoClass()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
-            w.in(LeaveApplication::getClassId, dp.getClassIds());
+            // 班主任/任课老师：按班级 + 学生双重过滤
+            List<Long> classIds = dp.getClassIds();
+            if (classIds != null && !classIds.isEmpty()) {
+                List<Long> studentIds = dataPermissionHelper.studentIdsByClasses(classIds);
+                if (studentIds.isEmpty()) {
+                    w.in(LeaveApplication::getClassId, classIds);
+                } else {
+                    w.and(w2 -> w2
+                            .in(LeaveApplication::getClassId, classIds)
+                            .or().in(LeaveApplication::getStudentId, studentIds));
+                }
+            }
+            // 如果 classIds 为空（teacher_class 表无绑定），不做 class 过滤
+            // 但仍通过下面 status 条件限制只查待审批等状态
         } else if (dp.isSelf()) {
             // 家长/学生：仅本人关联学生
             if (dp.hasNoStudent()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
@@ -86,10 +109,12 @@ public class LeaveApplicationController {
         if ("my".equals(role)) {
             w.eq(LeaveApplication::getApplicantId, uid);
         }
-        return ApiResponse.ok(leaveMapper.selectPage(new Page<>(pageNo, pageSize), w));
+        Page<LeaveApplication> page = leaveMapper.selectPage(new Page<>(pageNo, pageSize), w);
+        fillApplicantLabels(page.getRecords()); // 申请人标签，便于班主任识别来源
+        return ApiResponse.ok(page);
     }
 
-    /** 今日有效假条（给门卫端用） */
+    /** 今日有效假条（给门卫端用：含已批准/已离校/临时待补） */
     @Operation(summary = "今日有效假条列表（门卫）")
     @GetMapping("/today-valid")
     public ApiResponse<List<LeaveApplication>> todayValid() {
@@ -97,18 +122,65 @@ public class LeaveApplicationController {
         LocalDateTime endOfDay = startOfDay.plusDays(1);
         List<LeaveApplication> list = leaveMapper.selectList(
                 new LambdaQueryWrapper<LeaveApplication>()
-                        .in(LeaveApplication::getStatus, "APPROVED", "TEMP_PENDING")
+                        .in(LeaveApplication::getStatus, "APPROVED", "TEMP_PENDING", "DEPARTED")
                         .ge(LeaveApplication::getLeaveStart, startOfDay)
                         .lt(LeaveApplication::getLeaveStart, endOfDay)
                         .orderByAsc(LeaveApplication::getLeaveStart));
+        fillApplicantLabels(list);
         return ApiResponse.ok(list);
     }
 
-    /** 单条详情 */
+    /** 单条详情（含申请人姓名、核验记录、刷脸照片） */
     @Operation(summary = "请假申请详情")
     @GetMapping("/{id}")
-    public ApiResponse<LeaveApplication> detail(@PathVariable Long id) {
-        return ApiResponse.ok(leaveMapper.selectById(id));
+    public ApiResponse<Map<String, Object>> detail(@PathVariable Long id) {
+        LeaveApplication leave = leaveMapper.selectById(id);
+        if (leave == null) return ApiResponse.ok(null);
+
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        // 基础字段
+        result.put("id", leave.getId());
+        result.put("leaveNo", leave.getLeaveNo());
+        result.put("studentId", leave.getStudentId());
+        result.put("studentNo", leave.getStudentNo());
+        result.put("studentName", leave.getStudentName());
+        result.put("classId", leave.getClassId());
+        result.put("className", leave.getClassName());
+        result.put("leaveType", leave.getLeaveType());
+        result.put("reason", leave.getReason());
+        result.put("leaveStart", leave.getLeaveStart());
+        result.put("leaveEnd", leave.getLeaveEnd());
+        result.put("proofPhotoUrl", leave.getProofPhotoUrl());
+        result.put("isTemp", leave.getIsTemp());
+        result.put("status", leave.getStatus());
+        result.put("approveRemark", leave.getApproveRemark());
+        result.put("approveSignatureUrl", leave.getApproveSignatureUrl());
+        result.put("approvedBy", leave.getApprovedBy());
+        result.put("approvedAt", leave.getApprovedAt());
+        result.put("departAt", leave.getDepartAt());
+        result.put("returnAt", leave.getReturnAt());
+        result.put("tempDeadline", leave.getTempDeadline());
+        result.put("createdAt", leave.getCreatedAt());
+
+        // 申请人角色 + 姓名（如"家长王xx"、"老师张英语"）
+        result.put("applicantId", leave.getApplicantId());
+        result.put("applicantRole", leave.getApplicantRole());
+        if (leave.getApplicantId() != null) {
+            SysUser applicant = sysUserMapper.selectById(leave.getApplicantId());
+            result.put("applicantName", applicant != null ? applicant.getRealName() : "");
+        } else {
+            result.put("applicantName", "");
+        }
+        result.put("applicantLabel", buildApplicantLabel(leave)); // 申请人标签
+
+        // 关联的核验记录（人脸通行记录）
+        List<GateVerification> verifications = gateVerificationMapper.selectList(
+                new LambdaQueryWrapper<GateVerification>()
+                        .eq(GateVerification::getLeaveAppId, id)
+                        .orderByDesc(GateVerification::getVerifiedAt));
+        result.put("verifications", verifications);
+
+        return ApiResponse.ok(result);
     }
 
     // ======================== 提交 ========================
@@ -123,7 +195,32 @@ public class LeaveApplicationController {
         req.setStatus("PENDING");
         req.setIsTemp(0);
         req.setTenantId(1L);
+        req.setClassId(resolveClassId(req)); // classId 缺失时从学生档案补全
         leaveMapper.insert(req);
+
+        // 如果有暂存的人脸照片，同步写入/更新人脸档案
+        if (StringUtils.hasText(req.getFacePhotoUrl()) && req.getStudentId() != null) {
+            FaceRecord exist = faceRecordMapper.selectOne(
+                    new LambdaQueryWrapper<FaceRecord>()
+                            .eq(FaceRecord::getStudentNo, req.getStudentNo()));
+            if (exist != null) {
+                exist.setFacePhotoUrl(req.getFacePhotoUrl());
+                if (StringUtils.hasText(req.getClassName())) exist.setClassName(req.getClassName());
+                if (StringUtils.hasText(req.getStudentName())) exist.setRealName(req.getStudentName());
+                faceRecordMapper.updateById(exist);
+            } else {
+                FaceRecord fr = new FaceRecord();
+                fr.setStudentId(req.getStudentId());
+                fr.setStudentNo(req.getStudentNo());
+                fr.setRealName(req.getStudentName());
+                fr.setClassId(req.getClassId());
+                fr.setClassName(req.getClassName());
+                fr.setFacePhotoUrl(req.getFacePhotoUrl());
+                fr.setStatus("ENABLED");
+                fr.setTenantId(1L);
+                faceRecordMapper.insert(fr);
+            }
+        }
 
         // 精准通知该班级的班主任/任课教师审批
         notifyClassTeachers(req.getClassId(), uid,
@@ -198,6 +295,7 @@ public class LeaveApplicationController {
         req.setIsTemp(1);
         req.setStatus("TEMP_PENDING");
         req.setTenantId(1L);
+        req.setClassId(resolveClassId(req)); // classId 缺失时从学生档案补全
         LocalDateTime now = LocalDateTime.now();
         req.setDepartAt(now);
         req.setLeaveStart(now);
@@ -245,6 +343,11 @@ public class LeaveApplicationController {
 
     private void pushMessage(Long receiverId, Long senderId, String title, String content,
                              String bizType, Long bizId) {
+        pushMessage(receiverId, senderId, title, content, bizType, bizId, null, 2);
+    }
+
+    private void pushMessage(Long receiverId, Long senderId, String title, String content,
+                             String bizType, Long bizId, String targetRole, Integer priority) {
         SysMessage msg = new SysMessage();
         msg.setReceiverId(receiverId != null ? receiverId : 0L);
         msg.setSenderId(senderId);
@@ -253,6 +356,8 @@ public class LeaveApplicationController {
         msg.setBizType(bizType);
         msg.setBizId(bizId);
         msg.setIsRead(0);
+        msg.setPriority(priority != null ? priority : 2);
+        msg.setTargetRole(targetRole);
         msg.setTenantId(1L);
         messageMapper.insert(msg);
     }
@@ -270,18 +375,71 @@ public class LeaveApplicationController {
                             .eq(TeacherClass::getClassId, classId));
             if (teachers != null && !teachers.isEmpty()) {
                 for (TeacherClass tc : teachers) {
-                    pushMessage(tc.getTeacherUserId(), senderId, title, content, bizType, bizId);
+                    pushMessage(tc.getTeacherUserId(), senderId, title, content, bizType, bizId,
+                            "TEACHER", 1); // 教师审批消息 = 紧急
                 }
                 return;
             }
         }
-        // 回退：广播
-        pushMessage(0L, senderId, title, content, bizType, bizId);
+        // 回退：广播给所有教师
+        pushMessage(0L, senderId, title, content, bizType, bizId, "TEACHER", 1);
     }
 
     private String leaveTypeText(String type) {
         if ("SICK".equals(type)) return "病假";
         if ("PERSONAL".equals(type)) return "事假";
         return type == null ? "请假" : type;
+    }
+
+    /** classId 缺失时从学生档案补全（保证班主任通知/数据权限命中） */
+    private Long resolveClassId(LeaveApplication req) {
+        if (req.getClassId() != null) return req.getClassId();
+        if (req.getStudentId() != null) {
+            Student s = studentMapper.selectById(req.getStudentId());
+            if (s != null && s.getClassId() != null) {
+                if (!StringUtils.hasText(req.getClassName()) && StringUtils.hasText(s.getClassName())) {
+                    req.setClassName(s.getClassName());
+                }
+                return s.getClassId();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 构造申请人标签，便于班主任审批/后台识别来源：
+     *   家长 → "家长张大大 申请"
+     *   老师 → "语文老师张英语 代申请"（带任教学科，取不到则"老师张英语 代申请"）
+     *   门卫 → "门卫王大爷 临时放行"
+     */
+    private String buildApplicantLabel(LeaveApplication leave) {
+        String role = leave.getApplicantRole();
+        String name = "";
+        if (leave.getApplicantId() != null) {
+            SysUser u = sysUserMapper.selectById(leave.getApplicantId());
+            if (u != null) name = u.getRealName() == null ? "" : u.getRealName();
+        }
+        if ("GATE".equals(role)) {
+            return "门卫" + name + " 临时放行";
+        }
+        if ("TEACHER".equals(role) || "HEAD_TEACHER".equals(role)) {
+            // 取该老师任教学科
+            String subject = "";
+            if (leave.getApplicantId() != null) {
+                TeacherClass tc = teacherClassMapper.selectOne(new LambdaQueryWrapper<TeacherClass>()
+                        .eq(TeacherClass::getTeacherUserId, leave.getApplicantId())
+                        .last("LIMIT 1"));
+                if (tc != null && StringUtils.hasText(tc.getSubjectName())) subject = tc.getSubjectName();
+            }
+            return subject + "老师" + name + " 代申请";
+        }
+        // 默认家长
+        return "家长" + name + " 申请";
+    }
+
+    /** 给一批记录填充申请人标签 */
+    private void fillApplicantLabels(List<LeaveApplication> list) {
+        if (list == null) return;
+        for (LeaveApplication la : list) la.setApplicantLabel(buildApplicantLabel(la));
     }
 }

@@ -1,45 +1,62 @@
 <template>
   <view class="login-page">
-    <!-- 科技感背景装饰 -->
-    <view class="bg-decor">
-      <view class="glow glow-1"></view>
-      <view class="glow glow-2"></view>
-      <view class="grid-lines"></view>
+    <!-- 背景 -->
+    <view class="bg-base"></view>
+    <view class="bg-circle bg-c1"></view>
+    <view class="bg-circle bg-c2"></view>
+
+    <!-- 品牌区 -->
+    <view class="brand-area">
+      <view class="brand-badge">
+        <view class="badge-inner">
+          <text class="badge-char">盾</text>
+        </view>
+      </view>
+      <text class="brand-zh">云辰盾</text>
+      <text class="brand-en">YUNCHENDUN</text>
+      <text class="brand-sub">智慧家校共育 · 安全离校管理</text>
     </view>
 
-    <!-- Logo 区 -->
-    <view class="logo-area">
-      <view class="logo-badge">
-        <view class="logo-ring"></view>
-        <text class="logo-icon">盾</text>
-      </view>
-      <text class="logo-text">云辰盾</text>
-      <text class="logo-sub">YUNCHENDUN · 智慧家校共育平台</text>
-    </view>
+    <!-- 登录卡片 -->
+    <view class="login-card">
+      <text class="card-title">欢迎回来</text>
+      <text class="card-sub">请使用学校分配的账号登录</text>
 
-    <!-- 玻璃登录卡 -->
-    <view class="form-card">
-      <view class="card-title">欢迎登录</view>
-      <view class="card-subtitle">信息化教育 · 安全离校管理</view>
-
-      <view class="field">
-        <view class="field-icon">👤</view>
-        <input class="field-input" v-model="form.username" placeholder="请输入用户名" placeholder-class="ph" />
+      <view class="input-group">
+        <view class="input-box">
+          <text class="input-icon">👤</text>
+          <input
+            class="input-field"
+            v-model="form.username"
+            placeholder="请输入用户名"
+            placeholder-class="ph"
+            :maxlength="30"
+          />
+        </view>
+        <view class="input-box">
+          <text class="input-icon">🔒</text>
+          <input
+            class="input-field"
+            v-model="form.password"
+            password
+            placeholder="请输入密码"
+            placeholder-class="ph"
+            :maxlength="30"
+          />
+        </view>
       </view>
-      <view class="field">
-        <view class="field-icon">🔒</view>
-        <input class="field-input" v-model="form.password" password placeholder="请输入密码" placeholder-class="ph" />
-      </view>
 
-      <button class="login-btn" :class="{ loading }" :disabled="loading" @click="handleLogin">
+      <button class="submit-btn" :class="{ loading }" :disabled="loading" @click="handleLogin">
         <text v-if="!loading">登 录</text>
-        <text v-else>登录中…</text>
+        <text v-else>验证中…</text>
       </button>
 
-      <view class="tip">家长 / 教师 / 门卫账号由学校管理员统一创建</view>
+      <view class="tip-row">
+        <text class="tip-text">家长 / 教师 / 门卫账号由学校管理员统一开通</text>
+      </view>
     </view>
 
-    <view class="footer-brand">Powered by 云辰盾 · {{ year }}</view>
+    <view class="footer-text">Powered by 云辰盾 · {{ year }}</view>
   </view>
 </template>
 
@@ -58,11 +75,27 @@ const handleLogin = async () => {
   }
   loading.value = true;
   try {
+    // 1. 登录
     const data = await request({ url: '/auth/login', method: 'POST', data: { ...form } });
     uni.setStorageSync('ycd_token', data.tokenValue);
     uni.setStorageSync('ycd_userId', data.userId);
     uni.setStorageSync('ycd_realName', data.realName);
     uni.setStorageSync('ycd_roleCode', data.roleCode);
+
+    // 2. 加载角色专属信息（班级绑定/学生绑定）
+    try {
+      const info = await request({ url: '/auth/my-info' });
+      if (info.classNames) {
+        uni.setStorageSync('ycd_classNames', info.classNames);
+        uni.setStorageSync('ycd_managedClasses', JSON.stringify(info.managedClasses || []));
+      }
+      if (info.boundStudents) {
+        uni.setStorageSync('ycd_boundStudents', JSON.stringify(info.boundStudents));
+      }
+    } catch {
+      // my-info 失败不影响登录
+    }
+
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
     uni.showToast({ title: e.message || '登录失败', icon: 'none' });
@@ -74,80 +107,86 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-page {
-  position: relative;
   min-height: 100vh;
-  background: linear-gradient(165deg, #061a44 0%, #0b2a6b 45%, #103a8f 100%);
+  background: linear-gradient(180deg, #F0F4FA 0%, #E8EDF5 50%, #F5F7FA 100%);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 0 56rpx;
 }
+.bg-base { position: fixed; inset: 0; background: linear-gradient(180deg, #F0F4FA 0%, #E8EDF5 50%, #F5F7FA 100%); }
+.bg-circle { position: fixed; border-radius: 50%; filter: blur(120rpx); opacity: 0.4; pointer-events: none; }
+.bg-c1 { width: 500rpx; height: 500rpx; background: radial-gradient(circle, rgba(59,108,181,0.18), transparent); top: -200rpx; right: -150rpx; }
+.bg-c2 { width: 400rpx; height: 400rpx; background: radial-gradient(circle, rgba(212,168,83,0.12), transparent); bottom: 20%; left: -180rpx; }
 
-/* 背景光晕与网格 */
-.bg-decor { position: absolute; inset: 0; overflow: hidden; }
-.glow { position: absolute; border-radius: 50%; filter: blur(60rpx); opacity: 0.55; }
-.glow-1 { width: 420rpx; height: 420rpx; background: #15c8e0; top: -120rpx; right: -100rpx; }
-.glow-2 { width: 500rpx; height: 500rpx; background: #2b6cff; bottom: -160rpx; left: -140rpx; opacity: 0.4; }
-.grid-lines {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.04) 1rpx, transparent 1rpx),
-    linear-gradient(90deg, rgba(255,255,255,0.04) 1rpx, transparent 1rpx);
-  background-size: 60rpx 60rpx;
+/* 品牌区 */
+.brand-area {
+  position: relative; z-index: 1; text-align: center;
+  padding-top: 140rpx; padding-bottom: 52rpx;
 }
-
-/* Logo */
-.logo-area { position: relative; padding: 150rpx 0 70rpx; text-align: center; }
-.logo-badge {
-  position: relative; display: inline-flex; align-items: center; justify-content: center;
-  width: 140rpx; height: 140rpx; margin-bottom: 28rpx;
+.brand-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 130rpx; height: 130rpx; margin-bottom: 24rpx;
 }
-.logo-ring {
-  position: absolute; inset: 0; border-radius: 50%;
-  background: linear-gradient(135deg, #2b6cff, #15c8e0);
-  box-shadow: 0 0 50rpx rgba(21, 200, 224, 0.6);
-}
-.logo-icon { position: relative; font-size: 64rpx; font-weight: 800; color: #fff; }
-.logo-text { display: block; font-size: 60rpx; font-weight: 800; color: #fff; letter-spacing: 12rpx; }
-.logo-sub { display: block; margin-top: 16rpx; font-size: 22rpx; color: rgba(255,255,255,0.6); letter-spacing: 2rpx; }
-
-/* 玻璃登录卡 */
-.form-card {
-  position: relative;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(30rpx);
-  border: 1rpx solid rgba(255, 255, 255, 0.18);
-  border-radius: 32rpx;
-  padding: 56rpx 44rpx;
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
-}
-.card-title { font-size: 40rpx; font-weight: 700; color: #fff; }
-.card-subtitle { margin-top: 8rpx; font-size: 22rpx; color: rgba(255,255,255,0.55); margin-bottom: 44rpx; }
-
-.field {
-  display: flex; align-items: center;
-  height: 96rpx; margin-bottom: 28rpx; padding: 0 28rpx;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1rpx solid rgba(255, 255, 255, 0.2);
-  border-radius: 18rpx;
-}
-.field-icon { font-size: 32rpx; margin-right: 18rpx; opacity: 0.85; }
-.field-input { flex: 1; height: 100%; font-size: 30rpx; color: #fff; }
-.ph { color: rgba(255,255,255,0.4); }
-
-.login-btn {
-  width: 100%; height: 96rpx; margin-top: 16rpx;
+.badge-inner {
+  width: 110rpx; height: 110rpx; border-radius: 50%;
+  background: linear-gradient(135deg, #1E2F50, #2D4A7A);
+  border: 3rpx solid rgba(212,168,83,0.6);
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #2b6cff 0%, #15c8e0 100%);
-  color: #fff; font-size: 34rpx; font-weight: 700; letter-spacing: 8rpx;
-  border-radius: 18rpx; border: none;
-  box-shadow: 0 14rpx 36rpx rgba(21, 200, 224, 0.42);
+  box-shadow: 0 8rpx 32rpx rgba(30,47,80,0.2);
+  animation: badge-breathe 3s ease-in-out infinite;
 }
-.login-btn.loading { opacity: 0.7; }
-.login-btn::after { border: none; }
+@keyframes badge-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 8rpx 32rpx rgba(30,47,80,0.2); }
+  50% { transform: scale(1.04); box-shadow: 0 12rpx 40rpx rgba(30,47,80,0.3); }
+}
+.badge-char { font-size: 52rpx; font-weight: 800; color: #E8C068; }
+.brand-zh { display: block; font-size: 52rpx; font-weight: 700; color: #1E2F50; letter-spacing: 10rpx; }
+.brand-en { display: block; margin-top: 8rpx; font-size: 22rpx; color: #3B6CB5;
+  letter-spacing: 6rpx; font-family: 'Courier New', monospace; }
+.brand-sub { display: block; margin-top: 12rpx; font-size: 22rpx; color: #94A3B8; letter-spacing: 2rpx; }
 
-.tip { text-align: center; margin-top: 36rpx; font-size: 22rpx; color: rgba(255,255,255,0.45); }
+/* 登录卡片 */
+.login-card {
+  position: relative; z-index: 1; width: 100%; box-sizing: border-box;
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 44rpx 36rpx;
+  box-shadow: 0 8rpx 36rpx rgba(30,47,80,0.08);
+  overflow: hidden;
+}
+.card-title { display: block; font-size: 36rpx; font-weight: 700; color: #1E2F50; text-align: center; }
+.card-sub { display: block; margin-top: 10rpx; margin-bottom: 40rpx; font-size: 24rpx; color: #94A3B8; text-align: center; }
 
-.footer-brand {
-  position: relative; text-align: center; margin-top: 60rpx;
-  font-size: 20rpx; color: rgba(255,255,255,0.35); letter-spacing: 1rpx;
+.input-group { display: flex; flex-direction: column; gap: 20rpx; }
+.input-box {
+  display: flex; align-items: center; gap: 16rpx;
+  height: 96rpx; padding: 0 24rpx;
+  background: #F8FAFC;
+  border: 1rpx solid #E2E8F0;
+  border-radius: 16rpx;
+}
+.input-icon { font-size: 30rpx; opacity: 0.6; flex-shrink: 0; }
+.input-field { flex: 1; height: 100%; font-size: 28rpx; color: #1E293B; }
+.ph { color: #CBD5E1; }
+
+.submit-btn {
+  width: 100%; height: 96rpx; margin-top: 32rpx;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1E2F50 0%, #3B6CB5 100%);
+  color: #fff; font-size: 32rpx; font-weight: 700; letter-spacing: 8rpx;
+  border-radius: 16rpx; border: none;
+  box-shadow: 0 8rpx 28rpx rgba(30,47,80,0.25);
+}
+.submit-btn.loading { opacity: 0.65; }
+.submit-btn::after { border: none; }
+
+.tip-row { margin-top: 28rpx; text-align: center; }
+.tip-text { font-size: 22rpx; color: #CBD5E1; letter-spacing: 1rpx; }
+
+.footer-text {
+  position: relative; z-index: 1; margin-top: auto; padding: 44rpx 0 36rpx;
+  font-size: 20rpx; color: #CBD5E1; letter-spacing: 2rpx;
 }
 </style>

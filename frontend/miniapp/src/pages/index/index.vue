@@ -1,99 +1,118 @@
 <template>
   <view class="page">
-    <!-- 背景层 -->
-    <view class="bg-layer">
-      <view class="bg-grid"></view>
-      <view class="bg-glow bg-glow-1"></view>
-      <view class="bg-glow bg-glow-2"></view>
-    </view>
+    <scroll-view scroll-y class="scroll" :enhanced="true" :show-scrollbar="false">
+      <view :style="{ height: statusBarH + 16 + 'px' }"></view>
 
-    <scroll-view scroll-y class="scroll">
-      <!-- 顶部状态栏占位 -->
-      <view :style="{ height: statusBarH + 'px' }"></view>
-
-      <!-- 头部 -->
+      <!-- ========== 头部欢迎区 ========== -->
       <view class="header">
-        <view class="header-row">
-          <view class="user-block">
+        <!-- 顶部装饰条 -->
+        <view class="header-accent"></view>
+        
+        <view class="header-top">
+          <!-- 左侧：问候 + 姓名 -->
+          <view class="greet-block">
             <text class="greeting">{{ greeting }}</text>
             <text class="username">{{ realName }}</text>
-            <view class="role-chip">
-              <view class="role-dot"></view>
-              <text class="role-text">{{ roleName }}</text>
+            <!-- 身份信息条 -->
+            <view class="identity-strip">
+              <view class="role-badge">
+                <view class="role-dot"></view>
+                <text class="role-name">{{ roleLabel }}</text>
+              </view>
+              <!-- 班主任：所辖班级 -->
+              <view v-if="roleCode === 'HEAD_TEACHER' && myClassNames" class="context-tag">
+                <text class="context-icon">🏫</text>
+                <text class="context-text">所辖班级：{{ myClassNames }}</text>
+              </view>
+              <!-- 家长：绑定学生 -->
+              <view v-if="roleCode === 'PARENT' && boundStudents.length > 0" class="context-tag">
+                <text class="context-icon">👨‍👩‍👧</text>
+                <text class="context-text">
+                  已绑定：<text v-for="(s, i) in boundStudents" :key="i">
+                    {{ s.studentName }}<text v-if="s.className">（{{ s.className }}）</text>{{ i < boundStudents.length - 1 ? '、' : '' }}
+                  </text>
+                </text>
+              </view>
+              <!-- 教师 -->
+              <view v-if="roleCode === 'TEACHER' && myClassNames" class="context-tag">
+                <text class="context-icon">📚</text>
+                <text class="context-text">任教班级：{{ myClassNames }}</text>
+              </view>
+              <!-- 门卫 -->
+              <view v-if="roleCode === 'GATE'" class="context-tag">
+                <text class="context-icon">🛂</text>
+                <text class="context-text">今日在岗 · 门禁核验</text>
+              </view>
             </view>
           </view>
-          <view class="avatar">
-            <text class="avatar-text">{{ realName.charAt(0) }}</text>
-            <view class="avatar-ring"></view>
+
+          <!-- 右侧：头像 -->
+          <view class="avatar-wrap">
+            <view class="avatar-inner">
+              <text class="avatar-char">{{ realName.charAt(0) }}</text>
+            </view>
           </view>
         </view>
 
-        <!-- 品牌行 -->
-        <view class="brand-block">
-          <view class="brand-main">
-            <text class="brand-zh">云辰盾</text>
-            <view class="brand-badge">YCD</view>
-          </view>
-          <text class="brand-en">YUNCHENDUN · SMART CAMPUS</text>
-        </view>
-
-        <!-- 数据概览条 -->
-        <view class="stat-strip">
-          <view class="stat-cell">
+        <!-- 数据概览卡片 - 可点击 -->
+        <view class="stats-card">
+          <view class="stat-item" hover-class="stat-hover" @tap.stop="navTodo">
             <text class="stat-num">{{ stats.today }}</text>
-            <text class="stat-label">今日待办</text>
+            <text class="stat-label">待办事项</text>
+            <text class="stat-arrow">›</text>
           </view>
-          <view class="stat-sep"></view>
-          <view class="stat-cell">
+          <view class="stat-divider"></view>
+          <view class="stat-item" hover-class="stat-hover" @tap.stop="navMessages">
             <text class="stat-num">{{ stats.unread }}</text>
             <text class="stat-label">未读消息</text>
+            <text class="stat-arrow">›</text>
           </view>
-          <view class="stat-sep"></view>
-          <view class="stat-cell">
-            <text class="stat-num accent">{{ nowTime }}</text>
+          <view class="stat-divider"></view>
+          <view class="stat-item stat-time">
+            <text class="stat-num time-num">{{ nowTime }}</text>
             <text class="stat-label">{{ todayStr }}</text>
           </view>
         </view>
       </view>
 
-      <!-- 功能区 -->
+      <!-- ========== 功能区 ========== -->
       <view class="panel">
-        <view class="panel-head">
-          <view class="panel-bar"></view>
+        <view class="panel-header">
+          <view class="panel-line"></view>
           <text class="panel-title">{{ panelTitle }}</text>
-          <text class="panel-count">{{ entries.length }} 项</text>
+          <text class="panel-sub">{{ entries.length }} 项功能</text>
         </view>
 
         <view class="grid">
           <view
             v-for="(it, idx) in entries"
             :key="idx"
-            class="cell"
-            :hover-class="'cell-hover'"
-            @click="nav(it.url)"
+            class="card"
+            hover-class="card-press"
+            @tap="nav(it.url)"
           >
-            <view class="cell-glow" :style="{ background: it.glow }"></view>
-            <view class="cell-icon">
-              <text class="cell-emoji">{{ it.icon }}</text>
+            <view class="card-icon-box" :style="{ background: it.iconBg || '#EEF2FF' }">
+              <text class="card-emoji">{{ it.icon }}</text>
             </view>
-            <view class="cell-body">
-              <text class="cell-title">{{ it.title }}</text>
-              <text class="cell-desc">{{ it.desc }}</text>
+            <view class="card-body">
+              <text class="card-title">{{ it.title }}</text>
+              <text class="card-desc">{{ it.desc }}</text>
             </view>
-            <view class="cell-arrow">›</view>
+            <text class="card-arrow">›</text>
           </view>
         </view>
       </view>
 
-      <!-- 底部 -->
+      <!-- 底部品牌 -->
       <view class="footer">
-        <view class="logout" hover-class="logout-hover" @click="handleLogout">
+        <text class="brand-name">云辰盾 · YUNCHENDUN</text>
+        <text class="brand-slogan">智慧家校共育 · 安全离校管理</text>
+        <view class="logout-btn" hover-class="logout-press" @tap="handleLogout">
           <text class="logout-text">退出登录</text>
         </view>
-        <text class="copyright">Powered by 云辰盾 · v1.0</text>
       </view>
 
-      <view style="height: 40rpx;"></view>
+      <view style="height: 60rpx;"></view>
     </scroll-view>
   </view>
 </template>
@@ -109,82 +128,92 @@ const stats = ref({ today: 0, unread: 0 });
 const nowTime = ref('');
 const todayStr = ref('');
 
+// 角色专属数据
+const myClassNames = ref('');
+const boundStudents = ref([]);
+
 const greeting = (() => {
   const h = new Date().getHours();
-  if (h < 6) return '凌晨好';
-  if (h < 12) return '上午好';
-  if (h < 14) return '中午好';
-  if (h < 18) return '下午好';
-  return '晚上好';
+  if (h < 6) return '凌晨好，';
+  if (h < 12) return '上午好，';
+  if (h < 14) return '中午好，';
+  if (h < 18) return '下午好，';
+  return '晚上好，';
 })();
 
-const roleName = computed(() => ({
-  ADMIN: '系统管理员', PRINCIPAL: '校长', ACADEMIC: '教务',
+const roleLabel = computed(() => ({
+  ADMIN: '系统管理员', PRINCIPAL: '校长', ACADEMIC: '教务主任',
   HEAD_TEACHER: '班主任', TEACHER: '任课教师', GATE: '门卫',
   PARENT: '家长', STUDENT: '学生'
 }[roleCode.value] || '用户'));
 
-// 荧光色（青/蓝量子色）
-const GLOW_CYAN = 'radial-gradient(circle, rgba(0,229,255,0.5), transparent 70%)';
-const GLOW_BLUE = 'radial-gradient(circle, rgba(43,127,255,0.5), transparent 70%)';
-const GLOW_GREEN = 'radial-gradient(circle, rgba(0,230,150,0.5), transparent 70%)';
-const GLOW_GOLD = 'radial-gradient(circle, rgba(232,192,104,0.5), transparent 70%)';
+// 角色专属图标背景色
+const ICON_BG = {
+  gold: '#FFF9F0',
+  blue: '#EEF2FF', 
+  cyan: '#ECFEFF',
+  emerald: '#ECFDF5',
+};
 
 const MENUS = {
-  PARENT: {
-    title: '家长服务台',
-    items: [
-      { icon: '📝', title: '申请请假', desc: '事假 · 病假', url: '/pages/leave/apply', glow: GLOW_CYAN },
-      { icon: '📋', title: '我的请假', desc: '审批进度', url: '/pages/leave/my-leaves', glow: GLOW_BLUE },
-      { icon: '🏠', title: '居家报备', desc: '作息 · 情绪', url: '/pages/home-report/home-report', glow: GLOW_GREEN },
-      { icon: '📬', title: '我的报备', desc: '老师回复', url: '/pages/my-reports/my-reports', glow: GLOW_GOLD },
-    ]
-  },
-  STUDENT: {
-    title: '学生服务台',
-    items: [
-      { icon: '📋', title: '我的请假', desc: '老师家长代申请', url: '/pages/leave/my-leaves', glow: GLOW_CYAN },
-      { icon: '📬', title: '我的报备', desc: '查看记录', url: '/pages/my-reports/my-reports', glow: GLOW_BLUE },
-      { icon: '📊', title: '我的成绩', desc: '成绩查询', url: '/pages/academic/scores', glow: GLOW_GREEN },
-      { icon: '📚', title: '作业列表', desc: '待完成', url: '/pages/academic/homeworks', glow: GLOW_GOLD },
-    ]
-  },
   HEAD_TEACHER: {
     title: '班主任工作台',
     items: [
-      { icon: '✅', title: '请假审批', desc: '待办 · 签字', url: '/pages/leave/approve', glow: GLOW_CYAN },
-      { icon: '📝', title: '代学生请假', desc: '代为发起', url: '/pages/leave/apply', glow: GLOW_BLUE },
-      { icon: '⚡', title: '临时补批', desc: '24h 处理', url: '/pages/leave/approve?tab=TEMP_PENDING', glow: GLOW_GOLD },
-      { icon: '📊', title: '审批记录', desc: '历史查询', url: '/pages/leave/approve?tab=APPROVED', glow: GLOW_GREEN },
+      { icon: '✅', title: '请假审批', desc: '待办 · 签字确认', url: '/pages/leave/approve', iconBg: ICON_BG.gold },
+      { icon: '📝', title: '代学生请假', desc: '快捷发起申请', url: '/pages/leave/apply', iconBg: ICON_BG.blue },
+      { icon: '⚡', title: '临时补批', desc: '24小时内处理', url: '/pages/leave/approve?tab=TEMP_PENDING', iconBg: ICON_BG.cyan },
+      { icon: '📊', title: '审批记录', desc: '历史查阅', url: '/pages/leave/approve?tab=APPROVED', iconBg: ICON_BG.emerald },
     ]
   },
-  GATE: {
-    title: '门卫核验台',
+  PARENT: {
+    title: '家长服务台',
     items: [
-      { icon: '🛂', title: '刷脸核验', desc: 'AI 自动识别', url: '/pages/gate/verify', glow: GLOW_CYAN },
-      { icon: '📋', title: '今日假条', desc: '有效列表', url: '/pages/gate/today-leaves', glow: GLOW_BLUE },
-      { icon: '⚡', title: '临时放行', desc: '紧急登记', url: '/pages/gate/temp-depart', glow: GLOW_GOLD },
-      { icon: '⚠️', title: '异常记录', desc: '拦截日志', url: '/pages/gate/today-leaves', glow: GLOW_GREEN },
+      { icon: '📝', title: '申请请假', desc: '事假 · 病假', url: '/pages/leave/apply', iconBg: ICON_BG.gold },
+      { icon: '📋', title: '我的请假', desc: '审批进度追踪', url: '/pages/leave/my-leaves', iconBg: ICON_BG.blue },
+      { icon: '🏠', title: '居家报备', desc: '作息 · 健康', url: '/pages/home-report/home-report', iconBg: ICON_BG.cyan },
+      { icon: '📬', title: '我的报备', desc: '老师回复', url: '/pages/my-reports/my-reports', iconBg: ICON_BG.emerald },
     ]
   },
   TEACHER: {
     title: '教师工作台',
     items: [
-      { icon: '📝', title: '代学生请假', desc: '代为发起', url: '/pages/leave/apply', glow: GLOW_CYAN },
-      { icon: '📋', title: '我的申请', desc: '提交记录', url: '/pages/leave/my-leaves', glow: GLOW_BLUE },
-      { icon: '🏠', title: '班级报备', desc: '居家跟进', url: '/pages/home-report/home-report', glow: GLOW_GREEN },
-      { icon: '📚', title: '教务管理', desc: '作业成绩', url: '/pages/academic/homeworks', glow: GLOW_GOLD },
+      { icon: '📝', title: '代学生请假', desc: '快捷发起申请', url: '/pages/leave/apply', iconBg: ICON_BG.gold },
+      { icon: '📋', title: '我的申请', desc: '提交记录', url: '/pages/leave/my-leaves', iconBg: ICON_BG.blue },
+      { icon: '🏠', title: '班级报备', desc: '居家跟进', url: '/pages/home-report/home-report', iconBg: ICON_BG.cyan },
+      { icon: '📚', title: '教务管理', desc: '作业成绩', url: '/pages/academic/homeworks', iconBg: ICON_BG.emerald },
+    ]
+  },
+  GATE: {
+    title: '门卫核验台',
+    items: [
+      { icon: '🛂', title: '刷脸核验', desc: 'AI 自动识别', url: '/pages/gate/verify', iconBg: ICON_BG.gold },
+      { icon: '📋', title: '今日假条', desc: '在效列表', url: '/pages/gate/today-leaves', iconBg: ICON_BG.blue },
+      { icon: '⚡', title: '临时放行', desc: '紧急登记', url: '/pages/gate/temp-depart', iconBg: ICON_BG.cyan },
+      { icon: '⚠️', title: '异常记录', desc: '拦截日志', url: '/pages/gate/today-leaves', iconBg: ICON_BG.emerald },
+    ]
+  },
+  STUDENT: {
+    title: '学生服务台',
+    items: [
+      { icon: '📋', title: '我的请假', desc: '家长代申请', url: '/pages/leave/my-leaves', iconBg: ICON_BG.gold },
+      { icon: '📬', title: '我的报备', desc: '查看记录', url: '/pages/my-reports/my-reports', iconBg: ICON_BG.blue },
+      { icon: '📊', title: '我的成绩', desc: '成绩查询', url: '/pages/academic/scores', iconBg: ICON_BG.cyan },
+      { icon: '📚', title: '作业列表', desc: '待完成', url: '/pages/academic/homeworks', iconBg: ICON_BG.emerald },
     ]
   },
 };
 
 const current = computed(() => {
-  if (roleCode.value === 'STUDENT') return MENUS.STUDENT;
-  if (roleCode.value === 'PARENT') return MENUS.PARENT;
-  if (roleCode.value === 'HEAD_TEACHER') return MENUS.HEAD_TEACHER;
-  if (roleCode.value === 'GATE') return MENUS.GATE;
-  return MENUS.TEACHER;
+  const map = {
+    HEAD_TEACHER: MENUS.HEAD_TEACHER,
+    PARENT: MENUS.PARENT,
+    TEACHER: MENUS.TEACHER,
+    GATE: MENUS.GATE,
+    STUDENT: MENUS.STUDENT,
+  };
+  return map[roleCode.value] || MENUS.PARENT;
 });
+
 const panelTitle = computed(() => current.value.title);
 const entries = computed(() => current.value.items);
 
@@ -192,7 +221,28 @@ const updateClock = () => {
   const d = new Date();
   nowTime.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
-  todayStr.value = `${d.getMonth() + 1}/${d.getDate()} 周${week}`;
+  todayStr.value = `${d.getMonth() + 1}月${d.getDate()}日 周${week}`;
+};
+
+// 加载角色专属信息
+const loadMyInfo = async () => {
+  try {
+    const info = await request({ url: '/auth/my-info' });
+    if (info.classNames) {
+      myClassNames.value = info.classNames;
+      uni.setStorageSync('ycd_classNames', info.classNames);
+      uni.setStorageSync('ycd_managedClasses', JSON.stringify(info.managedClasses || []));
+    }
+    if (info.boundStudents) {
+      boundStudents.value = info.boundStudents;
+      uni.setStorageSync('ycd_boundStudents', JSON.stringify(info.boundStudents));
+    }
+  } catch {
+    myClassNames.value = uni.getStorageSync('ycd_classNames') || '';
+    try {
+      boundStudents.value = JSON.parse(uni.getStorageSync('ycd_boundStudents') || '[]');
+    } catch { boundStudents.value = []; }
+  }
 };
 
 const loadStats = async () => {
@@ -200,7 +250,6 @@ const loadStats = async () => {
     const r = await request({ url: '/sys/messages/unread-count' });
     stats.value.unread = r?.count || 0;
   } catch {}
-  // 待办：班主任看待审批数，门卫看今日假条数
   try {
     if (roleCode.value === 'HEAD_TEACHER') {
       const d = await request({ url: '/leave/applications?status=PENDING&pageSize=1' });
@@ -215,14 +264,36 @@ const loadStats = async () => {
   } catch {}
 };
 
+// 点击待办事项跳转
+const navTodo = () => {
+  if (roleCode.value === 'HEAD_TEACHER') {
+    uni.navigateTo({ url: '/pages/leave/approve' });
+  } else if (roleCode.value === 'GATE') {
+    uni.navigateTo({ url: '/pages/gate/verify' });
+  } else if (roleCode.value === 'PARENT') {
+    uni.navigateTo({ url: '/pages/leave/my-leaves' });
+  } else {
+    uni.navigateTo({ url: '/pages/leave/my-leaves' });
+  }
+};
+
+// 点击未读消息跳转
+const navMessages = () => {
+  uni.navigateTo({ url: '/pages/messages/messages' });
+};
+
 onMounted(() => {
   try {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : uni.getSystemInfoSync();
     statusBarH.value = info.statusBarHeight || 20;
   } catch {}
-  if (!uni.getStorageSync('ycd_token')) { uni.reLaunch({ url: '/pages/login/login' }); return; }
+  if (!uni.getStorageSync('ycd_token')) {
+    uni.reLaunch({ url: '/pages/login/login' });
+    return;
+  }
   updateClock();
   setInterval(updateClock, 30000);
+  loadMyInfo();
   loadStats();
 });
 
@@ -233,7 +304,9 @@ const handleLogout = () => {
     title: '提示', content: '确认退出登录？',
     success: (res) => {
       if (res.confirm) {
-        ['ycd_token', 'ycd_userId', 'ycd_realName', 'ycd_roleCode'].forEach(k => uni.removeStorageSync(k));
+        ['ycd_token', 'ycd_userId', 'ycd_realName', 'ycd_roleCode',
+         'ycd_classNames', 'ycd_managedClasses', 'ycd_boundStudents'
+        ].forEach(k => uni.removeStorageSync(k));
         uni.reLaunch({ url: '/pages/login/login' });
       }
     }
@@ -242,91 +315,119 @@ const handleLogout = () => {
 </script>
 
 <style scoped>
-.page { min-height: 100vh; background: #04081C; position: relative; overflow: hidden; }
-
-/* ── 背景层 ── */
-.bg-layer { position: fixed; inset: 0; z-index: 0; }
-.bg-grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(43,127,255,0.05) 1rpx, transparent 1rpx),
-    linear-gradient(90deg, rgba(43,127,255,0.05) 1rpx, transparent 1rpx);
-  background-size: 48rpx 48rpx;
-  mask-image: linear-gradient(180deg, #000 0%, transparent 60%);
-}
-.bg-glow { position: absolute; border-radius: 50%; filter: blur(80rpx); }
-.bg-glow-1 { width: 520rpx; height: 520rpx; background: rgba(0,229,255,0.18); top: -160rpx; right: -160rpx; }
-.bg-glow-2 { width: 460rpx; height: 460rpx; background: rgba(43,127,255,0.16); top: 180rpx; left: -180rpx; }
-
+/* ========== 基础 ========== */
+.page { min-height: 100vh; background: linear-gradient(180deg, #F0F4FA 0%, #E8EDF5 40%, #F5F7FA 100%); position: relative; }
 .scroll { position: relative; z-index: 1; height: 100vh; }
 
-/* ── 头部 ── */
-.header { padding: 24rpx 40rpx 0; }
-.header-row { display: flex; justify-content: space-between; align-items: flex-start; }
-.user-block { display: flex; flex-direction: column; }
-.greeting { font-size: 24rpx; color: rgba(255,255,255,0.45); letter-spacing: 2rpx; }
-.username { font-size: 44rpx; font-weight: 800; color: #fff; margin-top: 6rpx; letter-spacing: 1rpx; }
-.role-chip { display: inline-flex; align-items: center; gap: 10rpx; margin-top: 16rpx; padding: 6rpx 18rpx;
-  background: rgba(0,229,255,0.08); border: 1rpx solid rgba(0,229,255,0.3); border-radius: 8rpx; align-self: flex-start; }
-.role-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: #00E5FF; box-shadow: 0 0 10rpx #00E5FF; }
-.role-text { font-size: 22rpx; color: #00E5FF; letter-spacing: 1rpx; }
+/* ========== 头部 ========== */
+.header {
+  margin: 0 28rpx;
+  background: linear-gradient(160deg, #1E2F50 0%, #2D4A7A 50%, #3B6CB5 100%);
+  border-radius: 28rpx;
+  padding: 36rpx 32rpx 32rpx;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8rpx 32rpx rgba(30, 47, 80, 0.18);
+}
+.header-accent {
+  position: absolute; top: 0; left: 0; right: 0; height: 4rpx;
+  background: linear-gradient(90deg, transparent, #D4A853, #E8C068, #D4A853, transparent);
+  opacity: 0.7;
+}
+.header-top { display: flex; justify-content: space-between; align-items: flex-start; }
 
-.avatar { position: relative; width: 96rpx; height: 96rpx; border-radius: 16rpx;
-  background: linear-gradient(135deg, rgba(43,127,255,0.3), rgba(0,229,255,0.2));
-  border: 1rpx solid rgba(0,229,255,0.4);
-  display: flex; align-items: center; justify-content: center; }
-.avatar-text { font-size: 44rpx; font-weight: 800; color: #fff; }
-.avatar-ring { position: absolute; inset: -6rpx; border-radius: 18rpx; border: 1rpx solid rgba(0,229,255,0.25); }
+/* 问候区 */
+.greet-block { flex: 1; display: flex; flex-direction: column; }
+.greeting { font-size: 24rpx; color: rgba(255,255,255,0.6); letter-spacing: 1rpx; }
+.username { font-size: 44rpx; font-weight: 700; color: #fff; margin-top: 4rpx; letter-spacing: 2rpx; }
 
-/* 品牌 */
-.brand-block { margin-top: 48rpx; }
-.brand-main { display: flex; align-items: center; gap: 18rpx; }
-.brand-zh { font-size: 56rpx; font-weight: 800; color: #fff; letter-spacing: 8rpx; }
-.brand-badge { padding: 4rpx 16rpx; background: rgba(0,229,255,0.12); border: 1rpx solid rgba(0,229,255,0.35);
-  border-radius: 8rpx; font-size: 22rpx; color: #00E5FF; font-family: 'Courier New', monospace; font-weight: 700; letter-spacing: 2rpx; }
-.brand-en { display: block; margin-top: 10rpx; font-size: 20rpx; color: rgba(255,255,255,0.35);
-  letter-spacing: 3rpx; font-family: 'Courier New', monospace; }
+/* 身份信息条 */
+.identity-strip { display: flex; flex-direction: column; gap: 12rpx; margin-top: 20rpx; }
+.role-badge {
+  display: inline-flex; align-items: center; gap: 10rpx; align-self: flex-start;
+  padding: 8rpx 22rpx;
+  background: rgba(255,255,255,0.12);
+  border: 1rpx solid rgba(255,255,255,0.18);
+  border-radius: 30rpx;
+}
+.role-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: #E8C068; }
+.role-name { font-size: 24rpx; color: #F0D78C; font-weight: 600; letter-spacing: 2rpx; }
 
-/* 数据条 */
-.stat-strip { display: flex; align-items: center; margin-top: 40rpx;
-  background: rgba(255,255,255,0.04); border: 1rpx solid rgba(255,255,255,0.08);
-  border-radius: 16rpx; padding: 28rpx 0; backdrop-filter: blur(20rpx); }
-.stat-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8rpx; }
-.stat-num { font-size: 44rpx; font-weight: 800; color: #fff; font-family: 'Courier New', monospace; line-height: 1; }
-.stat-num.accent { color: #00E5FF; text-shadow: 0 0 16rpx rgba(0,229,255,0.5); }
-.stat-label { font-size: 20rpx; color: rgba(255,255,255,0.4); letter-spacing: 1rpx; }
-.stat-sep { width: 1rpx; height: 56rpx; background: rgba(255,255,255,0.1); }
+.context-tag {
+  display: flex; align-items: flex-start; gap: 10rpx;
+  padding: 10rpx 20rpx; background: rgba(255,255,255,0.08);
+  border-radius: 14rpx;
+}
+.context-icon { font-size: 24rpx; flex-shrink: 0; }
+.context-text { font-size: 23rpx; color: rgba(255,255,255,0.7); line-height: 1.6; }
 
-/* ── 功能面板 ── */
-.panel { padding: 48rpx 40rpx 0; }
-.panel-head { display: flex; align-items: center; gap: 16rpx; margin-bottom: 28rpx; }
-.panel-bar { width: 6rpx; height: 32rpx; background: linear-gradient(180deg, #00E5FF, #2B7FFF); border-radius: 3rpx;
-  box-shadow: 0 0 12rpx rgba(0,229,255,0.6); }
-.panel-title { font-size: 32rpx; font-weight: 700; color: #fff; letter-spacing: 2rpx; flex: 1; }
-.panel-count { font-size: 22rpx; color: rgba(255,255,255,0.35); font-family: 'Courier New', monospace; }
+/* 头像 */
+.avatar-wrap { position: relative; width: 96rpx; height: 96rpx; flex-shrink: 0; margin-top: 4rpx; }
+.avatar-inner {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.08));
+  border: 2rpx solid rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+}
+.avatar-char { font-size: 40rpx; font-weight: 700; color: #fff; }
 
-.grid { display: flex; flex-direction: column; gap: 20rpx; }
-.cell { position: relative; display: flex; align-items: center; gap: 24rpx;
-  background: rgba(255,255,255,0.04); border: 1rpx solid rgba(255,255,255,0.08);
-  border-radius: 18rpx; padding: 28rpx 28rpx; overflow: hidden;
-  backdrop-filter: blur(20rpx); transition: all 0.2s; }
-.cell-hover { background: rgba(0,229,255,0.06); border-color: rgba(0,229,255,0.3); transform: scale(0.985); }
-.cell-glow { position: absolute; width: 180rpx; height: 180rpx; left: -40rpx; top: -50rpx; opacity: 0.6; }
-.cell-icon { position: relative; width: 88rpx; height: 88rpx; border-radius: 16rpx;
-  background: rgba(255,255,255,0.06); border: 1rpx solid rgba(255,255,255,0.12);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.cell-emoji { font-size: 44rpx; }
-.cell-body { position: relative; flex: 1; }
-.cell-title { display: block; font-size: 30rpx; font-weight: 700; color: #fff; letter-spacing: 1rpx; }
-.cell-desc { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 8rpx; }
-.cell-arrow { position: relative; font-size: 40rpx; color: rgba(255,255,255,0.25); font-weight: 300; }
+/* 数据卡片 */
+.stats-card {
+  display: flex; align-items: center;
+  margin-top: 30rpx; padding: 24rpx 0;
+  background: rgba(255,255,255,0.1);
+  border-radius: 18rpx;
+  backdrop-filter: blur(20rpx);
+}
+.stat-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6rpx; position: relative; }
+.stat-hover { background: rgba(255,255,255,0.08); border-radius: 14rpx; }
+.stat-num { font-size: 42rpx; font-weight: 700; color: #fff; font-family: 'DIN', 'Courier New', monospace; line-height: 1; }
+.time-num { color: #F0D78C; font-size: 36rpx; }
+.stat-label { font-size: 22rpx; color: rgba(255,255,255,0.5); letter-spacing: 1rpx; }
+.stat-arrow { font-size: 24rpx; color: rgba(255,255,255,0.3); position: absolute; right: 16rpx; top: 50%; transform: translateY(-50%); }
+.stat-time { min-width: 160rpx; }
+.stat-divider { width: 1rpx; height: 48rpx; background: rgba(255,255,255,0.12); }
 
-/* ── 底部 ── */
-.footer { padding: 56rpx 40rpx 0; }
-.logout { text-align: center; padding: 26rpx; background: rgba(255,255,255,0.03);
-  border: 1rpx solid rgba(255,80,80,0.25); border-radius: 14rpx; }
-.logout-hover { background: rgba(255,80,80,0.1); }
-.logout-text { font-size: 28rpx; color: #FF6B6B; letter-spacing: 2rpx; }
-.copyright { display: block; text-align: center; margin-top: 32rpx; font-size: 20rpx;
-  color: rgba(255,255,255,0.25); letter-spacing: 1rpx; font-family: 'Courier New', monospace; }
+/* ========== 功能面板 ========== */
+.panel { padding: 36rpx 28rpx 0; }
+.panel-header { display: flex; align-items: center; gap: 14rpx; margin-bottom: 24rpx; }
+.panel-line {
+  width: 5rpx; height: 32rpx;
+  background: linear-gradient(180deg, #D4A853, #3B6CB5);
+  border-radius: 3rpx;
+}
+.panel-title { font-size: 30rpx; font-weight: 700; color: #1E2F50; letter-spacing: 2rpx; flex: 1; }
+.panel-sub { font-size: 22rpx; color: #94A3B8; }
+
+/* 功能卡片 */
+.grid { display: flex; flex-direction: column; gap: 16rpx; }
+.card {
+  display: flex; align-items: center; gap: 20rpx;
+  background: #fff;
+  border-radius: 18rpx; padding: 26rpx 24rpx;
+  box-shadow: 0 2rpx 16rpx rgba(0,0,0,0.04);
+  transition: all 0.2s;
+}
+.card-press { background: #F8FAFC; transform: scale(0.985); box-shadow: 0 1rpx 8rpx rgba(0,0,0,0.06); }
+.card-icon-box {
+  width: 80rpx; height: 80rpx; border-radius: 18rpx;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.card-emoji { font-size: 40rpx; }
+.card-body { flex: 1; min-width: 0; }
+.card-title { display: block; font-size: 28rpx; font-weight: 600; color: #1E293B; letter-spacing: 1rpx; }
+.card-desc { display: block; font-size: 22rpx; color: #94A3B8; margin-top: 6rpx; }
+.card-arrow { font-size: 36rpx; color: #CBD5E1; font-weight: 300; flex-shrink: 0; }
+
+/* ========== 底部 ========== */
+.footer { padding: 52rpx 28rpx 0; text-align: center; }
+.brand-name { display: block; font-size: 24rpx; font-weight: 600; color: #94A3B8; letter-spacing: 4rpx; }
+.brand-slogan { display: block; margin-top: 8rpx; font-size: 20rpx; color: #CBD5E1; letter-spacing: 2rpx; }
+.logout-btn {
+  margin-top: 36rpx; padding: 22rpx 0; text-align: center;
+  background: #fff; border: 1rpx solid #FEE2E2; border-radius: 14rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
+}
+.logout-press { background: #FFF5F5; }
+.logout-text { font-size: 26rpx; color: #EF4444; letter-spacing: 2rpx; }
 </style>

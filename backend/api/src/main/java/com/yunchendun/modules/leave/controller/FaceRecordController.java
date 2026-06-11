@@ -7,17 +7,22 @@ import com.yunchendun.common.api.ApiResponse;
 import com.yunchendun.common.security.DataPermission;
 import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.leave.domain.FaceRecord;
+import com.yunchendun.modules.leave.domain.GateVerification;
 import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
+import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
+import com.yunchendun.modules.leave.service.FaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 模块: 人脸识别请假离校
@@ -30,6 +35,8 @@ import java.util.Map;
 public class FaceRecordController {
 
     private final FaceRecordMapper faceRecordMapper;
+    private final FaceService faceService;
+    private final GateVerificationMapper gateVerificationMapper;
     private final DataPermissionHelper dataPermissionHelper;
 
     /** 分页查询人脸档案（后台管理） */
@@ -100,6 +107,33 @@ public class FaceRecordController {
         return ApiResponse.ok(record);
     }
 
+    /** 编辑人脸档案（修改基本信息，不含照片） */
+    @Operation(summary = "编辑人脸档案")
+    @PutMapping("/{id}")
+    public ApiResponse<FaceRecord> update(@PathVariable Long id, @RequestBody FaceRecord record) {
+        FaceRecord rec = faceRecordMapper.selectById(id);
+        if (rec == null) return ApiResponse.fail(404, "档案不存在");
+        if (StringUtils.hasText(record.getRealName())) rec.setRealName(record.getRealName());
+        if (StringUtils.hasText(record.getStudentNo())) rec.setStudentNo(record.getStudentNo());
+        if (StringUtils.hasText(record.getClassName())) rec.setClassName(record.getClassName());
+        if (StringUtils.hasText(record.getGradeName())) rec.setGradeName(record.getGradeName());
+        if (StringUtils.hasText(record.getHeadTeacherName())) rec.setHeadTeacherName(record.getHeadTeacherName());
+        if (record.getClassId() != null) rec.setClassId(record.getClassId());
+        if (record.getStudentId() != null) rec.setStudentId(record.getStudentId());
+        faceRecordMapper.updateById(rec);
+        return ApiResponse.ok(rec);
+    }
+
+    /** 删除人脸档案 */
+    @Operation(summary = "删除人脸档案")
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        FaceRecord rec = faceRecordMapper.selectById(id);
+        if (rec == null) return ApiResponse.fail(404, "档案不存在");
+        faceRecordMapper.deleteById(id);
+        return ApiResponse.ok(null);
+    }
+
     /** 修改档案状态（启用/禁用） */
     @Operation(summary = "修改人脸档案状态")
     @PutMapping("/{id}/status")
@@ -112,78 +146,42 @@ public class FaceRecordController {
         return ApiResponse.ok(null);
     }
 
-    /** 人脸照片比对（本期：返回模拟分数，预留真实API） */
+    /** 人脸照片比对（门卫核验用，由 FaceService 统一处理真实 API 或 Mock） */
     @Operation(summary = "人脸比对（门卫核验用）")
     @PostMapping("/compare")
     public ApiResponse<Map<String, Object>> compare(@RequestBody Map<String, String> body) {
         String studentNo = body.get("studentNo");
         String capturePhotoUrl = body.get("capturePhotoUrl");
-
-        // 查询人脸档案
-        FaceRecord rec = faceRecordMapper.selectOne(
-                new LambdaQueryWrapper<FaceRecord>()
-                        .eq(FaceRecord::getStudentNo, studentNo)
-                        .eq(FaceRecord::getStatus, "ACTIVE"));
-        if (rec == null || !StringUtils.hasText(rec.getFacePhotoUrl())) {
-            return ApiResponse.ok(Map.of("score", 0.0, "passed", false, "message", "人脸档案不存在"));
-        }
-
-        /*
-         * TODO: 接入真实人脸对比 API（腾讯云 / 百度云）
-         * 腾讯云示例：
-         *   FaceVerifyRequest req = new FaceVerifyRequest();
-         *   req.setImageA(base64A); req.setImageB(base64B);
-         *   double score = iai.FaceVerify(req).getScore();
-         *
-         * 本期 Mock：固定返回高分（档案存在即视为通过），后期替换为真实比对
-         */
-        double mockScore = 92.5 + (Math.random() * 5); // 92.5 ~ 97.5 模拟
-        double threshold = 80.0;
-        boolean passed = mockScore >= threshold;
-
-        return ApiResponse.ok(Map.of(
-                "score", Math.round(mockScore * 10.0) / 10.0,
-                "passed", passed,
-                "studentId", rec.getStudentId(),
-                "realName", rec.getRealName(),
-                "facePhotoUrl", rec.getFacePhotoUrl(),
-                "message", passed ? "人脸比对通过" : "人脸比对不匹配"
-        ));
+        return ApiResponse.ok(faceService.compare(studentNo, capturePhotoUrl));
     }
 
     /**
      * 刷脸识别：上传抓拍照片，在人脸库中检索匹配学生（门卫端免输入学籍号）。
-     * 本期 Mock：返回人脸库中有照片的候选人 + 模拟匹配分（降序），门卫点选确认。
-     * TODO: 接入腾讯云 SearchFaces / 百度人脸搜索，按 1:N 检索返回 Top-K 真实匹配。
+     * 由 FaceService 统一处理（真实 API 或 Mock），返回 Top-5 候选人（降序）。
      */
     @Operation(summary = "刷脸识别（人脸库1:N检索）")
     @PostMapping("/recognize")
     public ApiResponse<List<Map<String, Object>>> recognize(@RequestBody Map<String, String> body) {
-        // String capturePhotoUrl = body.get("capturePhotoUrl"); // 真实API会用到
+        String capturePhotoUrl = body.get("capturePhotoUrl");
+
+        // 查今日已核验离校的学籍号（刷脸识别时排除已离校学生）
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        List<GateVerification> todayDeparted = gateVerificationMapper.selectList(
+                new LambdaQueryWrapper<GateVerification>()
+                        .eq(GateVerification::getResult, "PASS")
+                        .ge(GateVerification::getVerifiedAt, startOfDay));
+        java.util.Set<String> departedNos = todayDeparted.stream()
+                .map(GateVerification::getStudentNo)
+                .collect(Collectors.toSet());
+
+        // 从人脸库中获取所有 Active 且有照片的记录，排除已离校的
         List<FaceRecord> lib = faceRecordMapper.selectList(new LambdaQueryWrapper<FaceRecord>()
                 .eq(FaceRecord::getStatus, "ACTIVE")
                 .isNotNull(FaceRecord::getFacePhotoUrl)
                 .ne(FaceRecord::getFacePhotoUrl, "")
+                .notIn(!departedNos.isEmpty(), FaceRecord::getStudentNo, departedNos)
                 .orderByDesc(FaceRecord::getUpdatedAt)
                 .last("LIMIT 20"));
-
-        List<Map<String, Object>> candidates = new ArrayList<>();
-        int idx = 0;
-        for (FaceRecord r : lib) {
-            // Mock：首位最高分，其余依次递减，模拟1:N检索置信度
-            double score = idx == 0 ? 96.0 + Math.random() * 3
-                    : Math.max(60.0, 92.0 - idx * 6 - Math.random() * 4);
-            Map<String, Object> m = new HashMap<>();
-            m.put("studentId", r.getStudentId());
-            m.put("studentNo", r.getStudentNo());
-            m.put("realName", r.getRealName());
-            m.put("className", r.getClassName());
-            m.put("facePhotoUrl", r.getFacePhotoUrl());
-            m.put("score", Math.round(score * 10.0) / 10.0);
-            candidates.add(m);
-            idx++;
-            if (idx >= 5) break; // Top-5
-        }
-        return ApiResponse.ok(candidates);
+        return ApiResponse.ok(faceService.recognize(lib, capturePhotoUrl));
     }
 }

@@ -47,3 +47,14 @@ sa-token:
 
 knife4j:
   enable: true
+
+# 人脸识别配置（mock=模拟模式 / tencent=腾讯云API）
+face:
+  api:
+    provider: mock
+    threshold: 80.0
+    tencent:
+      secret-id:
+      secret-key:
+      region: ap-guangzhou
+      group-id: ycd-students

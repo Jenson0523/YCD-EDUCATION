@@ -27,6 +27,12 @@ public class LeaveApplication {
     private LocalDateTime leaveStart;
     private LocalDateTime leaveEnd;
     private String proofPhotoUrl;
+    /** 暂存人脸照片URL（提交请假时传入，持久化到face_record表，不存入本表） */
+    @TableField(exist = false)
+    private String facePhotoUrl;
+    /** 申请人标签（如"家长张大大 申请"、"语文老师张英语 代申请"、"门卫王大爷 临时放行"），非DB字段 */
+    @TableField(exist = false)
+    private String applicantLabel;
     private Integer isTemp;      // 0=常规 1=临时紧急
     /**
      * 状态：

@@ -85,7 +85,10 @@
 
             <view class="card-footer">
               <text class="leave-no">{{ item.leaveNo }}</text>
-              <text v-if="item.departAt" class="depart-time">离校 {{ fmtDt(item.departAt) }}</text>
+              <view class="ft-right">
+                <text v-if="item.approveSignatureUrl" class="sig-tag">✍ 已签字</text>
+                <text v-if="item.departAt" class="depart-time">离校 {{ fmtDt(item.departAt) }}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -189,5 +192,7 @@ const fmtDt = (dt) => {
 
 .card-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 16rpx; border-top: 1rpx solid #F3F4F6; }
 .leave-no { font-size: 20rpx; color: #CBD5E1; }
+.ft-right { display: flex; align-items: center; gap: 12rpx; }
+.sig-tag { font-size: 20rpx; color: #6366f1; background: #EEF2FF; padding: 4rpx 12rpx; border-radius: 20rpx; }
 .depart-time { font-size: 20rpx; color: #9CA3AF; }
 </style>

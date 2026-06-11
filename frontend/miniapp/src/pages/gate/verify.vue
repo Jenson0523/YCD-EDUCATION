@@ -48,6 +48,13 @@
         <text class="cap-text">{{ scanning ? '识别中…' : (capturePhoto ? '重新刷脸' : '点击刷脸识别') }}</text>
       </view>
 
+      <!-- 未识别到（全部已离校或无未离校学生） -->
+      <view v-if="scanned && candidates.length === 0 && !picked" class="no-cand">
+        <text class="no-cand-icon">🔍</text>
+        <text class="no-cand-text">未识别到待离校学生</text>
+        <text class="no-cand-sub">今日所有已批准学生均已核验离校</text>
+      </view>
+
       <!-- 识别候选列表 -->
       <view v-if="candidates.length > 0 && !picked" class="candidates">
         <view class="cand-head">
@@ -69,7 +76,8 @@
               <text class="cand-name">{{ c.realName }}</text>
               <view v-if="i === 0" class="cand-best">最佳匹配</view>
             </view>
-            <text class="cand-meta">{{ c.studentNo }} · {{ c.className || '—' }}</text>
+            <text class="cand-meta">{{ c.gradeName || '' }}{{ c.gradeName && c.className ? ' · ' : '' }}{{ c.className || '' }}</text>
+            <text class="cand-meta-sub" v-if="c.headTeacherName">班主任：{{ c.headTeacherName }}</text>
           </view>
           <view class="cand-score">
             <text class="cand-score-num">{{ c.score }}</text>
@@ -84,7 +92,8 @@
           <image :src="resolvePhoto(picked.facePhotoUrl)" class="pk-avatar" mode="aspectFill" />
           <view class="pk-info">
             <text class="pk-name">{{ picked.realName }}</text>
-            <text class="pk-meta">{{ picked.studentNo }} · {{ picked.className || '—' }}</text>
+            <text class="pk-meta">{{ picked.gradeName || '' }}{{ picked.gradeName && picked.className ? ' · ' : '' }}{{ picked.className || '—' }}</text>
+            <text class="pk-meta-sub" v-if="picked.headTeacherName">班主任：{{ picked.headTeacherName }}</text>
             <view class="pk-score">
               <view class="pk-score-bar"><view class="pk-score-fill" :style="{ width: picked.score + '%' }"></view></view>
               <text class="pk-score-text">匹配度 {{ picked.score }}%</text>
@@ -93,10 +102,45 @@
           <view class="pk-change" @click="resetPick">重选</view>
         </view>
 
-        <view class="verify-btn" :class="{ disabled: verifying }" hover-class="vb-hover" @click="doVerify">
-          <text v-if="!verifying" class="vb-text">核 验 放 行</text>
-          <view v-else class="vb-loading"><text class="vb-dot">●</text><text class="vb-dot">●</text><text class="vb-dot">●</text></view>
-        </view>
+        <!-- 预检中 -->
+        <view v-if="checkingLeave" class="leave-checking">正在核验假条…</view>
+
+        <!-- 有有效假条 → 确认放行 -->
+        <template v-else-if="leaveInfo && leaveInfo.hasLeave">
+          <view class="leave-found">
+            <view class="lf-head"><text class="lf-badge">✓ 有效假条</text><text class="lf-no mono">{{ leaveInfo.leaveNo }}</text></view>
+            <view class="lf-row"><text class="lf-k">类型</text><text class="lf-v">{{ leaveInfo.leaveType }}</text></view>
+            <view class="lf-row"><text class="lf-k">离校</text><text class="lf-v mono">{{ fmtDt(leaveInfo.leaveStart) }}</text></view>
+            <view class="lf-row"><text class="lf-k">返校</text><text class="lf-v mono">{{ fmtDt(leaveInfo.leaveEnd) }}</text></view>
+            <view class="lf-row"><text class="lf-k">事由</text><text class="lf-v">{{ leaveInfo.reason }}</text></view>
+          </view>
+          <view class="verify-btn" :class="{ disabled: verifying }" hover-class="vb-hover" @click="doVerify">
+            <text v-if="!verifying" class="vb-text">确 认 放 行</text>
+            <view v-else class="vb-loading"><text class="vb-dot">●</text><text class="vb-dot">●</text><text class="vb-dot">●</text></view>
+          </view>
+        </template>
+
+        <!-- 无有效假条 → 不予放行 + 临时放行 -->
+        <template v-else-if="leaveInfo && !leaveInfo.hasLeave">
+          <view class="leave-none">
+            <text class="ln-icon">⛔</text>
+            <text class="ln-title">无当日有效假条</text>
+            <text class="ln-sub">该学生未提交请假或未审批通过，正常情况不予放行</text>
+          </view>
+          <view class="temp-block">
+            <text class="temp-label">⚡ 临时紧急放行</text>
+            <textarea
+              v-model="tempReason"
+              class="temp-input"
+              placeholder="请填写临时放行原因（如家长来电、突发情况…），放行后将同步班主任补批"
+              :maxlength="200"
+            />
+            <view class="temp-btn" :class="{ disabled: tempReleasing }" hover-class="tb-hover" @click="doTempRelease">
+              <text v-if="!tempReleasing" class="tb-text">⚡ 临时放行并同步补批</text>
+              <view v-else class="vb-loading"><text class="vb-dot">●</text><text class="vb-dot">●</text><text class="vb-dot">●</text></view>
+            </view>
+          </view>
+        </template>
       </view>
 
       <!-- 核验结果 -->
@@ -111,9 +155,17 @@
         <view class="rc-divider"></view>
         <view class="rc-rows">
           <view class="rc-row"><text class="rc-k">人脸匹配</text><text class="rc-v mono">{{ result.faceScore }} 分</text></view>
-          <view v-if="result.leaveNo" class="rc-row"><text class="rc-k">假条编号</text><text class="rc-v mono">{{ result.leaveNo }}</text></view>
           <view v-if="result.studentName" class="rc-row"><text class="rc-k">学生</text><text class="rc-v">{{ result.studentName }}</text></view>
-          <view class="rc-row"><text class="rc-k">结果</text><text class="rc-v">{{ result.message }}</text></view>
+          <view v-if="result.className" class="rc-row"><text class="rc-k">班级</text><text class="rc-v">{{ result.gradeName }} {{ result.className }}</text></view>
+          <view v-if="result.leaveNo" class="rc-row"><text class="rc-k">假条编号</text><text class="rc-v mono">{{ result.leaveNo }}</text></view>
+          <view v-if="result.leaveType" class="rc-row"><text class="rc-k">请假类型</text><text class="rc-v">{{ result.leaveType }}</text></view>
+          <view v-if="result.leaveStart" class="rc-row"><text class="rc-k">离校时间</text><text class="rc-v mono">{{ result.leaveStart }}</text></view>
+          <view v-if="result.leaveEnd" class="rc-row"><text class="rc-k">预计返校</text><text class="rc-v mono">{{ result.leaveEnd }}</text></view>
+          <view v-if="result.reason" class="rc-row rc-row-wrap"><text class="rc-k">请假事由</text><text class="rc-v">{{ result.reason }}</text></view>
+          <view v-if="result.approverName" class="rc-row"><text class="rc-k">审批人</text><text class="rc-v">{{ result.approverName }}</text></view>
+        </view>
+        <view v-if="result.result === 'PASS' && result.leaveId" class="rc-detail-btn" hover-class="rc-detail-hover" @click="goLeaveDetail">
+          查看假条详情 ›
         </view>
         <view class="rc-reset" hover-class="rc-reset-hover" @click="resetAll">继续核验下一位</view>
       </view>
@@ -131,6 +183,7 @@ const statusBarH = ref(20);
 const capturePhoto = ref('');
 const capturePhotoUrl = ref('');
 const scanning = ref(false);
+const scanned = ref(false); // 是否已完成过一次刷脸识别
 const verifying = ref(false);
 const candidates = ref([]);
 const picked = ref(null);
@@ -154,14 +207,18 @@ const scanTip = computed(() => {
 
 const resultIcon = computed(() => {
   if (!result.value) return '';
-  return result.value.result === 'PASS' ? '✓' : (result.value.result === 'NO_LEAVE' ? '!' : '✕');
+  if (result.value.result === 'PASS') return '✓';
+  if (result.value.result === 'TEMP') return '⚡';
+  if (result.value.result === 'NO_LEAVE') return '!';
+  return '✕';
 });
 const resultTitle = computed(() => {
   if (!result.value) return '';
-  return { PASS: '核验通过 · 放行', NO_LEAVE: '无有效假条 · 拦截', FACE_MISMATCH: '人脸不匹配 · 拦截' }[result.value.result] || '已记录';
+  return { PASS: '核验通过 · 放行', TEMP: '临时放行 · 待补批', NO_LEAVE: '无有效假条 · 拦截', FACE_MISMATCH: '人脸不匹配 · 拦截' }[result.value.result] || '已记录';
 });
 
 const resolvePhoto = (u) => assetUrl(u) || '/static/avatar-default.png';
+const fmtDt = (dt) => dt ? String(dt).replace('T', ' ').slice(5, 16) : '—';
 
 onMounted(() => {
   try {
@@ -193,8 +250,9 @@ const startScan = () => {
         // 模拟识别延迟，体现扫描动效
         await new Promise(r => setTimeout(r, 1200));
         candidates.value = list || [];
+        scanned.value = true;
         if (!candidates.value.length) {
-          uni.showToast({ title: '人脸库中未找到匹配学生', icon: 'none' });
+          uni.showToast({ title: '今日所有学生均已核验离校', icon: 'none' });
         }
       } catch (e) {
         uni.showToast({ title: e.message || '识别失败', icon: 'none' });
@@ -205,12 +263,29 @@ const startScan = () => {
   });
 };
 
-const pickCandidate = (c) => {
+// 锁定身份后预检假条状态
+const leaveInfo = ref(null);   // { hasLeave, leaveNo, leaveType, leaveStart, leaveEnd, reason }
+const checkingLeave = ref(false);
+const tempReleasing = ref(false);
+const tempReason = ref('');
+
+const pickCandidate = async (c) => {
   picked.value = c;
   try { uni.vibrateShort(); } catch {}
+  // 预检该学生今日是否有有效假条
+  checkingLeave.value = true;
+  leaveInfo.value = null;
+  try {
+    leaveInfo.value = await request({ url: `/leave/gate/check?studentNo=${c.studentNo}` });
+  } catch (e) {
+    leaveInfo.value = { hasLeave: false };
+  } finally {
+    checkingLeave.value = false;
+  }
 };
-const resetPick = () => { picked.value = null; };
+const resetPick = () => { picked.value = null; leaveInfo.value = null; tempReason.value = ''; };
 
+// 有假条 → 确认放行核验
 const doVerify = async () => {
   if (!picked.value || verifying.value) return;
   verifying.value = true;
@@ -235,16 +310,64 @@ const doVerify = async () => {
   }
 };
 
+// 无假条 → 临时放行（生成临时假条，同步班主任补批）
+const doTempRelease = async () => {
+  if (!picked.value || tempReleasing.value) return;
+  if (!tempReason.value.trim()) { uni.showToast({ title: '请填写临时放行原因', icon: 'none' }); return; }
+  tempReleasing.value = true;
+  try {
+    await request({
+      url: '/leave/applications/temp-depart', method: 'POST',
+      data: {
+        studentId: picked.value.studentId,
+        studentNo: picked.value.studentNo,
+        studentName: picked.value.realName,
+        classId: picked.value.classId || null,
+        className: picked.value.className || '',
+        leaveType: 'PERSONAL',
+        reason: tempReason.value
+      }
+    });
+    // 同时记录一次核验放行日志
+    try {
+      await request({
+        url: '/leave/gate/verify', method: 'POST',
+        data: { studentNo: picked.value.studentNo, capturePhotoUrl: capturePhotoUrl.value,
+                faceMatchScore: picked.value.score, verifyType: 'DEPART' }
+      });
+    } catch {}
+    const d = new Date();
+    resultTime.value = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    result.value = {
+      result: 'TEMP', message: '⚡ 已临时放行，假条已同步班主任补批',
+      faceScore: picked.value.score, studentName: picked.value.realName
+    };
+    try { uni.vibrateShort(); } catch {}
+  } catch (e) {
+    uni.showToast({ title: e.message || '临时放行失败', icon: 'none' });
+  } finally {
+    tempReleasing.value = false;
+  }
+};
+
 const resetAll = () => {
   capturePhoto.value = '';
   capturePhotoUrl.value = '';
   candidates.value = [];
   picked.value = null;
   result.value = null;
+  scanned.value = false;
+  leaveInfo.value = null;
+  tempReason.value = '';
 };
 
 const goBack = () => uni.navigateBack();
 const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
+const goLeaveDetail = () => {
+  if (result.value && result.value.leaveId) {
+    uni.navigateTo({ url: '/pages/leave/detail?id=' + result.value.leaveId });
+  }
+};
 </script>
 
 <style scoped>
@@ -312,6 +435,12 @@ const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 
 /* 候选列表 */
 .candidates { margin: 36rpx 40rpx 0; }
+
+/* 无候选提示 */
+.no-cand { margin: 36rpx 40rpx 0; text-align: center; padding: 80rpx 0; }
+.no-cand-icon { display: block; font-size: 80rpx; margin-bottom: 24rpx; }
+.no-cand-text { display: block; font-size: 28rpx; font-weight: 600; color: rgba(255,255,255,0.5); }
+.no-cand-sub { display: block; font-size: 22rpx; color: rgba(255,255,255,0.25); margin-top: 12rpx; }
 .cand-head { display: flex; align-items: center; gap: 14rpx; margin-bottom: 20rpx; }
 .cand-bar { width: 6rpx; height: 28rpx; background: linear-gradient(180deg,#00E5FF,#2B7FFF); border-radius: 3rpx; box-shadow: 0 0 10rpx rgba(0,229,255,0.6); }
 .cand-title { font-size: 28rpx; font-weight: 700; color: #fff; flex: 1; }
@@ -326,6 +455,7 @@ const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 .cand-name { font-size: 30rpx; font-weight: 700; color: #fff; }
 .cand-best { font-size: 18rpx; color: #00E5FF; background: rgba(0,229,255,0.12); border: 1rpx solid rgba(0,229,255,0.3); padding: 2rpx 12rpx; border-radius: 6rpx; }
 .cand-meta { display: block; font-size: 22rpx; color: rgba(255,255,255,0.4); margin-top: 6rpx; font-family: 'Courier New', monospace; }
+.cand-meta-sub { display: block; font-size: 20rpx; color: rgba(232,192,104,0.6); margin-top: 4rpx; }
 .cand-score { display: flex; align-items: baseline; }
 .cand-score-num { font-size: 40rpx; font-weight: 800; color: #00E5FF; font-family: 'Courier New', monospace; text-shadow: 0 0 12rpx rgba(0,229,255,0.4); }
 .cand-score-unit { font-size: 22rpx; color: rgba(0,229,255,0.6); }
@@ -338,6 +468,7 @@ const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 .pk-info { flex: 1; }
 .pk-name { display: block; font-size: 34rpx; font-weight: 800; color: #fff; }
 .pk-meta { display: block; font-size: 22rpx; color: rgba(255,255,255,0.45); margin-top: 6rpx; font-family: 'Courier New', monospace; }
+.pk-meta-sub { display: block; font-size: 20rpx; color: rgba(232,192,104,0.5); margin-top: 4rpx; }
 .pk-score { margin-top: 16rpx; }
 .pk-score-bar { width: 100%; height: 8rpx; background: rgba(255,255,255,0.1); border-radius: 4rpx; overflow: hidden; }
 .pk-score-fill { height: 100%; background: linear-gradient(90deg, #00E5FF, #2B7FFF); border-radius: 4rpx; }
@@ -354,9 +485,46 @@ const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 .vb-dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
 
+/* 预检中 */
+.leave-checking { margin-top: 24rpx; padding: 28rpx; text-align: center; font-size: 26rpx; color: #00E5FF;
+  background: rgba(0,229,255,0.05); border: 1rpx solid rgba(0,229,255,0.2); border-radius: 16rpx; }
+
+/* 有有效假条 */
+.leave-found { margin-top: 24rpx; padding: 24rpx; background: rgba(0,230,150,0.06);
+  border: 1rpx solid rgba(0,230,150,0.3); border-radius: 16rpx; }
+.lf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16rpx;
+  padding-bottom: 16rpx; border-bottom: 1rpx solid rgba(255,255,255,0.08); }
+.lf-badge { font-size: 26rpx; font-weight: 700; color: #00E696; }
+.lf-no { font-size: 22rpx; color: rgba(255,255,255,0.4); }
+.lf-row { display: flex; padding: 8rpx 0; }
+.lf-k { width: 90rpx; font-size: 24rpx; color: rgba(255,255,255,0.4); flex-shrink: 0; }
+.lf-v { flex: 1; font-size: 24rpx; color: rgba(255,255,255,0.85); }
+.lf-v.mono { font-family: 'Courier New', monospace; color: #00E5FF; }
+
+/* 无有效假条 */
+.leave-none { margin-top: 24rpx; padding: 32rpx; text-align: center; background: rgba(255,80,80,0.06);
+  border: 1rpx solid rgba(255,80,80,0.3); border-radius: 16rpx; }
+.ln-icon { display: block; font-size: 56rpx; margin-bottom: 12rpx; }
+.ln-title { display: block; font-size: 30rpx; font-weight: 700; color: #FF6B6B; }
+.ln-sub { display: block; font-size: 22rpx; color: rgba(255,255,255,0.45); margin-top: 10rpx; line-height: 1.5; }
+
+/* 临时放行 */
+.temp-block { margin-top: 20rpx; padding: 24rpx; background: rgba(232,192,104,0.06);
+  border: 1rpx solid rgba(232,192,104,0.3); border-radius: 16rpx; }
+.temp-label { display: block; font-size: 26rpx; font-weight: 700; color: #E8C068; margin-bottom: 16rpx; }
+.temp-input { width: 100%; min-height: 120rpx; padding: 18rpx; box-sizing: border-box;
+  background: rgba(255,255,255,0.05); border: 1rpx solid rgba(255,255,255,0.12);
+  border-radius: 12rpx; font-size: 26rpx; color: #fff; }
+.temp-btn { margin-top: 18rpx; height: 96rpx; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #C4973A, #E8C068); border-radius: 16rpx; box-shadow: 0 10rpx 28rpx rgba(196,151,58,0.35); }
+.tb-hover { opacity: 0.85; }
+.temp-btn.disabled { opacity: 0.6; }
+.tb-text { font-size: 30rpx; font-weight: 800; color: #1A1200; letter-spacing: 2rpx; }
+
 /* 结果 */
 .result-card { margin: 36rpx 40rpx 0; border-radius: 18rpx; overflow: hidden; border: 1rpx solid; }
 .rc-PASS { background: rgba(0,230,150,0.08); border-color: rgba(0,230,150,0.35); }
+.rc-TEMP { background: rgba(232,192,104,0.08); border-color: rgba(232,192,104,0.35); }
 .rc-NO_LEAVE { background: rgba(232,192,104,0.08); border-color: rgba(232,192,104,0.35); }
 .rc-FACE_MISMATCH { background: rgba(255,80,80,0.08); border-color: rgba(255,80,80,0.35); }
 .rc-head { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; }
@@ -372,6 +540,11 @@ const navToday = () => uni.navigateTo({ url: '/pages/gate/today-leaves' });
 .rc-k { font-size: 24rpx; color: rgba(255,255,255,0.45); }
 .rc-v { font-size: 24rpx; color: #fff; font-weight: 500; flex: 1; text-align: right; }
 .rc-v.mono { font-family: 'Courier New', monospace; color: #00E5FF; }
+.rc-row-wrap { flex-wrap: wrap; }
+.rc-row-wrap .rc-v { text-align: left; margin-top: 6rpx; }
+.rc-detail-btn { text-align: center; padding: 20rpx; font-size: 26rpx; color: #2B7FFF; font-weight: 600;
+  border-top: 1rpx solid rgba(43,127,255,0.2); margin: 0 28rpx; }
+.rc-detail-hover { background: rgba(43,127,255,0.08); }
 .rc-reset { text-align: center; padding: 24rpx; font-size: 26rpx; color: rgba(0,229,255,0.7); border-top: 1rpx solid rgba(255,255,255,0.06); }
 .rc-reset-hover { background: rgba(0,229,255,0.06); }
 </style>

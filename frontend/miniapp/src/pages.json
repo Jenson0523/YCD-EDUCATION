@@ -11,8 +11,15 @@
       "path": "pages/index/index",
       "style": {
         "navigationBarTitleText": "云辰盾",
-        "navigationBarBackgroundColor": "#060F2B",
+        "navigationBarBackgroundColor": "#1E2F50",
         "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/messages/messages",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "消息中心"
       }
     },
     {

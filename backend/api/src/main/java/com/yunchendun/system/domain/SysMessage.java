@@ -28,5 +28,7 @@ public class SysMessage {
     private String bizType;
     private Long bizId;
     private Integer isRead; // 0=未读 1=已读
+    private Integer priority; // 1=紧急 2=重要 3=普通
+    private String targetRole; // ALL/TEACHER/PARENT/HEAD_TEACHER，NULL=个人消息
     private LocalDateTime createdAt;
 }
