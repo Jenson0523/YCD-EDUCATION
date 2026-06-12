@@ -72,9 +72,16 @@ public class SysUserController {
         return ApiResponse.ok(null);
     }
 
+    /**
+     * 重置密码。body 可传 {"newPassword":"xxx"} 指定新密码（管理员设置）；
+     * 不传则生成随机密码并返回。
+     */
     @PutMapping("/{id}/reset-password")
-    public ApiResponse<Map<String, String>> resetPassword(@PathVariable Long id) {
-        String newPwd = "Ycd@" + (int)(Math.random() * 9000 + 1000);
+    public ApiResponse<Map<String, String>> resetPassword(@PathVariable Long id,
+                                                          @RequestBody(required = false) Map<String, String> body) {
+        String newPwd = body != null && body.get("newPassword") != null && !body.get("newPassword").isBlank()
+                ? body.get("newPassword")
+                : "Ycd@" + (int) (Math.random() * 9000 + 1000);
         SysUser user = new SysUser();
         user.setId(id);
         user.setPasswordHash(passwordEncoder.encode(newPwd));
