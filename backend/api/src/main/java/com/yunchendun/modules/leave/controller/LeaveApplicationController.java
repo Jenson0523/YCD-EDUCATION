@@ -198,29 +198,8 @@ public class LeaveApplicationController {
         req.setClassId(resolveClassId(req)); // classId 缺失时从学生档案补全
         leaveMapper.insert(req);
 
-        // 如果有暂存的人脸照片，同步写入/更新人脸档案
-        if (StringUtils.hasText(req.getFacePhotoUrl()) && req.getStudentId() != null) {
-            FaceRecord exist = faceRecordMapper.selectOne(
-                    new LambdaQueryWrapper<FaceRecord>()
-                            .eq(FaceRecord::getStudentNo, req.getStudentNo()));
-            if (exist != null) {
-                exist.setFacePhotoUrl(req.getFacePhotoUrl());
-                if (StringUtils.hasText(req.getClassName())) exist.setClassName(req.getClassName());
-                if (StringUtils.hasText(req.getStudentName())) exist.setRealName(req.getStudentName());
-                faceRecordMapper.updateById(exist);
-            } else {
-                FaceRecord fr = new FaceRecord();
-                fr.setStudentId(req.getStudentId());
-                fr.setStudentNo(req.getStudentNo());
-                fr.setRealName(req.getStudentName());
-                fr.setClassId(req.getClassId());
-                fr.setClassName(req.getClassName());
-                fr.setFacePhotoUrl(req.getFacePhotoUrl());
-                fr.setStatus("ENABLED");
-                fr.setTenantId(1L);
-                faceRecordMapper.insert(fr);
-            }
-        }
+        // 人脸录入不再随请假提交直接落库（合规要求先阅读并同意《告知同意书》），
+        // 统一走 POST /api/leave/face（含同意校验+权限校验+审计留痕），前端请假页会引导跳转录入。
 
         // 精准通知该班级的班主任/任课教师审批
         notifyClassTeachers(req.getClassId(), uid,

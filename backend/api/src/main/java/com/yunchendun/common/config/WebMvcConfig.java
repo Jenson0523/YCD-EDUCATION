@@ -2,14 +2,10 @@ package com.yunchendun.common.config;
 
 import com.yunchendun.common.interceptor.LoginInterceptor;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.nio.file.Paths;
 
 /**
  * 模块: 平台级 / common
@@ -23,15 +19,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final LoginInterceptor loginInterceptor;
 
-    @Value("${app.upload.dir:./uploads}")
-    private String uploadDir;
-
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
                         "/api/auth/login",
+                        // 受保护文件预览自带 token 校验（image标签无法带Header）
+                        "/api/files/preview",
                         "/doc.html",
                         "/swagger-ui/**",
                         "/v3/api-docs/**",
@@ -39,15 +34,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 );
     }
 
-    /** 静态资源：上传的图片对外访问 /uploads/** */
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String absPath = Paths.get(uploadDir).toAbsolutePath().normalize().toString()
-                .replace("\\", "/");
-        if (!absPath.endsWith("/")) absPath += "/";
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:" + absPath);
-    }
+    /*
+     * 安全说明：/uploads/** 公开静态映射已移除——人脸照片等敏感图片
+     * 一律经 /api/files/preview 鉴权访问，防止 URL 泄露导致人脸数据外泄。
+     */
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {

@@ -50,6 +50,15 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="授权" width="150">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.consentAt"
+                        :content="`${row.consentByName || ''}(${row.consentRole || ''}) 于 ${row.consentAt} 同意 ${row.consentVersion || ''}`">
+              <el-tag type="success" size="small" effect="plain">✓ 已授权</el-tag>
+            </el-tooltip>
+            <el-tag v-else type="warning" size="small" effect="plain">未留痕</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160" />
         <el-table-column label="操作" fixed="right" width="260">
           <template #default="{ row }">
@@ -161,6 +170,19 @@
           </div>
           <div class="form-tip">上传清晰正脸照片，用于门卫端 AI 人脸比对核验</div>
         </el-form-item>
+
+        <!-- 合规授权确认（新增时必勾） -->
+        <el-form-item v-if="!editId" label="授权确认" required>
+          <div class="consent-box">
+            <el-checkbox v-model="consentChecked">
+              本人确认已向该学生监护人出示《学生人脸信息采集与使用告知同意书》并取得其明确同意
+            </el-checkbox>
+            <div class="form-tip">
+              依据《个人信息保护法》，人脸属敏感个人信息，采集须取得监护人单独同意；
+              本次操作将记录授权审计日志。家长可在小程序「人脸录入」自行阅读同意书并授权录入。
+            </div>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -216,15 +238,26 @@ const previewTitle = ref('');
 const uploadAction = '/api/upload/image';
 const uploadHeaders = computed(() => ({ Authorization: localStorage.getItem('ycd_token') || '' }));
 
+// 合规：新增/换照片须确认已取得监护人授权同意
+const consentChecked = ref(false);
+
 const canSave = computed(() => {
   if (editId.value) return !!form.value.studentNo;
-  return !!form.value.studentNo && !!form.value.facePhotoUrl;
+  return !!form.value.studentNo && !!form.value.facePhotoUrl && consentChecked.value;
 });
 
+/**
+ * 受保护图片地址：/uploads/** 已不再公开，统一经
+ * /api/files/preview?path=...&token=... 鉴权访问（防人脸照片泄露）。
+ */
 const resolveUrl = (url) => {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return url;
+  let p = String(url);
+  const i = p.indexOf('/uploads/');
+  if (i >= 0) p = p.substring(i);
+  else if (p.startsWith('http')) return p;
+  const token = localStorage.getItem('ycd_token') || '';
+  return `/api/files/preview?path=${encodeURIComponent(p)}&token=${encodeURIComponent(token)}`;
 };
 
 const load = async () => {
@@ -269,6 +302,7 @@ const openCreate = () => {
   editId.value = null;
   selectedStudentId.value = null;
   studentOptions.value = [];
+  consentChecked.value = false;
   form.value = { studentId: null, studentNo: '', realName: '', className: '', gradeName: '', headTeacherName: '', facePhotoUrl: '' };
   dialogVisible.value = true;
 };
@@ -334,7 +368,8 @@ const handleSave = async () => {
       await http.put(`/leave/face/${editId.value}`, form.value);
       ElMessage.success('档案已更新');
     } else {
-      await http.post('/leave/face', form.value);
+      // 后端强制要求 consentAgreed=true（《告知同意书》合规）
+      await http.post('/leave/face', { ...form.value, consentAgreed: consentChecked.value });
       ElMessage.success('档案创建成功');
     }
     dialogVisible.value = false;
@@ -412,4 +447,6 @@ const handleDelete = async (row) => {
 .face-scan-card:hover { background: #f0f5ff; border-color: #2b6cff; }
 .scan-icon { font-size: 32px; color: #2b6cff; }
 .scan-text { font-size: 13px; color: #606266; }
+.consent-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; line-height: 1.6; }
+.consent-box :deep(.el-checkbox__label) { white-space: normal; line-height: 1.6; font-size: 13px; }
 </style>

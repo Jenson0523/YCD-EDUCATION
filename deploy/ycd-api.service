@@ -1,0 +1,26 @@
+# 云辰盾后端 systemd 服务
+# 放到 /etc/systemd/system/ycd-api.service
+# 然后: systemctl daemon-reload && systemctl enable --now ycd-api
+
+[Unit]
+Description=YCD Education Backend API
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=ycd
+WorkingDirectory=/opt/ycd
+# 注意 -Djava.library.path 不需要：ArcSoft lib-path 在 application-prod.yml 配置
+ExecStart=/usr/bin/java -Xms512m -Xmx1024m \
+    -Dfile.encoding=UTF-8 \
+    -jar /opt/ycd/ycd-api.jar \
+    --spring.profiles.active=prod \
+    --spring.config.additional-location=file:/opt/ycd/application-prod.yml
+Restart=always
+RestartSec=5
+# 日志：journalctl -u ycd-api -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

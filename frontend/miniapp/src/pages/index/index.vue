@@ -163,6 +163,7 @@ const MENUS = {
       { icon: '📝', title: '代学生请假', desc: '快捷发起申请', url: '/pages/leave/apply', iconBg: ICON_BG.blue },
       { icon: '⚡', title: '临时补批', desc: '24小时内处理', url: '/pages/leave/approve?tab=TEMP_PENDING', iconBg: ICON_BG.cyan },
       { icon: '📊', title: '审批记录', desc: '历史查阅', url: '/pages/leave/approve?tab=APPROVED', iconBg: ICON_BG.emerald },
+      { icon: '🧑‍💻', title: '人脸录入', desc: '代学生授权采集', url: '/pages/face/enroll', iconBg: ICON_BG.blue },
     ]
   },
   PARENT: {
@@ -172,6 +173,7 @@ const MENUS = {
       { icon: '📋', title: '我的请假', desc: '审批进度追踪', url: '/pages/leave/my-leaves', iconBg: ICON_BG.blue },
       { icon: '🏠', title: '居家报备', desc: '作息 · 健康', url: '/pages/home-report/home-report', iconBg: ICON_BG.cyan },
       { icon: '📬', title: '我的报备', desc: '老师回复', url: '/pages/my-reports/my-reports', iconBg: ICON_BG.emerald },
+      { icon: '🧑‍💻', title: '人脸录入', desc: '为孩子授权采集', url: '/pages/face/enroll', iconBg: ICON_BG.gold },
     ]
   },
   TEACHER: {
@@ -181,6 +183,7 @@ const MENUS = {
       { icon: '📋', title: '我的申请', desc: '提交记录', url: '/pages/leave/my-leaves', iconBg: ICON_BG.blue },
       { icon: '🏠', title: '班级报备', desc: '居家跟进', url: '/pages/home-report/home-report', iconBg: ICON_BG.cyan },
       { icon: '📚', title: '教务管理', desc: '作业成绩', url: '/pages/academic/homeworks', iconBg: ICON_BG.emerald },
+      { icon: '🧑‍💻', title: '人脸录入', desc: '代学生授权采集', url: '/pages/face/enroll', iconBg: ICON_BG.gold },
     ]
   },
   GATE: {

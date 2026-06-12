@@ -27,6 +27,15 @@ public class FaceRecord {
     /** 预留：硬件设备授权标识 */
     private String deviceAuthCode;
     private String status; // ACTIVE / DISABLED
+    /** 合规授权摘要（最近一次有效授权，详单见 face_consent_log） */
+    private String consentVersion;
+    private LocalDateTime consentAt;
+    private Long consentBy;
+    private String consentByName;
+    private String consentRole;
+    /** 录入时是否勾选同意（非DB字段，提交载荷用） */
+    @TableField(exist = false)
+    private Boolean consentAgreed;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)

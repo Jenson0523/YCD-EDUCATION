@@ -111,6 +111,11 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring-boot.version}</version>
+                <configuration>
+                    <!-- 把 system 范围依赖(虹软 arcsoft-sdk-face.jar)打进可执行jar，
+                         否则云服务器运行时 NoClassDefFoundError -->
+                    <includeSystemScope>true</includeSystemScope>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

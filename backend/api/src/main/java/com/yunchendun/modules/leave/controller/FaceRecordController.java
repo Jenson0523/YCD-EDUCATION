@@ -10,7 +10,10 @@ import com.yunchendun.modules.leave.domain.FaceRecord;
 import com.yunchendun.modules.leave.domain.GateVerification;
 import com.yunchendun.modules.leave.mapper.FaceRecordMapper;
 import com.yunchendun.modules.leave.mapper.GateVerificationMapper;
+import com.yunchendun.modules.leave.service.FaceConsentService;
 import com.yunchendun.modules.leave.service.FaceService;
+import com.yunchendun.system.domain.SysUser;
+import com.yunchendun.system.mapper.SysUserMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -36,8 +39,10 @@ public class FaceRecordController {
 
     private final FaceRecordMapper faceRecordMapper;
     private final FaceService faceService;
+    private final FaceConsentService faceConsentService;
     private final GateVerificationMapper gateVerificationMapper;
     private final DataPermissionHelper dataPermissionHelper;
+    private final SysUserMapper sysUserMapper;
 
     /** 分页查询人脸档案（后台管理） */
     @Operation(summary = "人脸档案列表")
@@ -85,26 +90,86 @@ public class FaceRecordController {
         return ApiResponse.ok(rec);
     }
 
-    /** 新建或更新人脸档案（家长/班主任上传照片） */
-    @Operation(summary = "新建/更新人脸档案")
+    /** 人脸采集《告知同意书》全文（采集前必须展示给用户阅读） */
+    @Operation(summary = "人脸采集告知同意书")
+    @GetMapping("/consent-doc")
+    public ApiResponse<Map<String, Object>> consentDoc() {
+        return ApiResponse.ok(faceConsentService.getConsentDoc());
+    }
+
+    /**
+     * 新建或更新人脸档案（家长为孩子录入 / 教师代录入 / 管理员后台录入）。
+     * 合规要求：
+     *   1. 必须 consentAgreed=true（已阅读并同意《告知同意书》），否则拒绝；
+     *   2. 数据权限：家长仅能为绑定孩子录入；教师仅能为所辖班级学生录入；
+     *   3. 每次录入/更新写入授权审计日志（face_consent_log）。
+     */
+    @Operation(summary = "新建/更新人脸档案（需先同意告知书）")
     @PostMapping
     public ApiResponse<FaceRecord> save(@RequestBody FaceRecord record) {
+        // ── 合规：必须勾选同意 ──
+        if (record.getConsentAgreed() == null || !record.getConsentAgreed()) {
+            return ApiResponse.fail(400, "请先阅读并同意《学生人脸信息采集与使用告知同意书》");
+        }
+
+        // ── 数据权限：家长→绑定孩子；教师→所辖班级；管理员→全部 ──
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isSelf()) {
+            if (record.getStudentId() == null || dp.hasNoStudent()
+                    || !dp.getStudentIds().contains(record.getStudentId())) {
+                return ApiResponse.fail(403, "只能为已绑定的孩子录入人脸");
+            }
+        } else if (dp.isClass()) {
+            if (record.getStudentId() == null || dp.hasNoClass()
+                    || !dataPermissionHelper.studentIdsByClasses(dp.getClassIds())
+                            .contains(record.getStudentId())) {
+                return ApiResponse.fail(403, "只能为所辖班级的学生录入人脸");
+            }
+        }
+        // ALL/GATE：不限制（管理员后台录入；门卫端不提供录入入口）
+
+        // 操作人信息（写入授权摘要与审计日志）
+        Long uid = StpUtil.getLoginIdAsLong();
+        SysUser operator = sysUserMapper.selectById(uid);
+        String operatorName = operator != null ? operator.getRealName() : "";
+        String operatorRole = operator != null ? operator.getRoleCode() : "";
+
         // 检查是否已有档案
         FaceRecord exist = faceRecordMapper.selectOne(
                 new LambdaQueryWrapper<FaceRecord>()
                         .eq(FaceRecord::getStudentNo, record.getStudentNo()));
-        if (exist != null) {
-            // 更新照片
+        boolean isUpdate = exist != null;
+        FaceRecord target;
+        if (isUpdate) {
             exist.setFacePhotoUrl(record.getFacePhotoUrl());
             exist.setStatus("ACTIVE");
             if (StringUtils.hasText(record.getRealName())) exist.setRealName(record.getRealName());
-            faceRecordMapper.updateById(exist);
-            return ApiResponse.ok(exist);
+            if (StringUtils.hasText(record.getClassName())) exist.setClassName(record.getClassName());
+            if (StringUtils.hasText(record.getGradeName())) exist.setGradeName(record.getGradeName());
+            if (record.getClassId() != null) exist.setClassId(record.getClassId());
+            target = exist;
+        } else {
+            record.setStatus("ACTIVE");
+            record.setTenantId(1L);
+            target = record;
         }
-        record.setStatus("ACTIVE");
-        record.setTenantId(1L);
-        faceRecordMapper.insert(record);
-        return ApiResponse.ok(record);
+
+        // 授权摘要
+        target.setConsentVersion(FaceConsentService.CONSENT_VERSION);
+        target.setConsentAt(LocalDateTime.now());
+        target.setConsentBy(uid);
+        target.setConsentByName(operatorName);
+        target.setConsentRole(operatorRole);
+
+        if (isUpdate) faceRecordMapper.updateById(target);
+        else faceRecordMapper.insert(target);
+
+        // 审计留痕
+        faceConsentService.recordConsent(
+                target.getStudentId(), target.getStudentNo(), target.getRealName(),
+                uid, operatorName, operatorRole, isUpdate ? "UPDATE" : "ENROLL");
+
+        return ApiResponse.ok(target);
     }
 
     /** 编辑人脸档案（修改基本信息，不含照片） */

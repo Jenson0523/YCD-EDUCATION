@@ -199,7 +199,7 @@
             <text class="title-opt">（选填）</text>
           </view>
           <view class="photo-area" @click="choosePhoto">
-            <image v-if="form.proofPhotoUrl" :src="form.proofPhotoUrl" class="proof-img" mode="aspectFill" />
+            <image v-if="form.proofPhotoUrl" :src="proofDisplayUrl" class="proof-img" mode="aspectFill" />
             <view v-else class="photo-placeholder">
               <view class="pp-icon-wrap">
                 <text class="pp-icon">+</text>
@@ -229,27 +229,16 @@
             <view class="fe-reupload" @click="enrollFace">重新录入</view>
           </view>
 
-          <!-- 已暂存（拍照了但未提交） -->
-          <view v-else-if="faceStatus === 'temp'" class="face-enrolled" style="background: linear-gradient(135deg, #FFF7ED, #FFEDD5); border-color: #FB923C;">
-            <image :src="facePhotoUrl" class="fe-photo" mode="aspectFill" />
-            <view class="fe-info">
-              <text class="fe-ok" style="color: #EA580C;">📷 照片已暂存</text>
-              <text class="fe-sub" style="color: #FB923C;">确认请假后将正式录入人脸档案</text>
-            </view>
-            <view class="fe-reupload" style="color: #EA580C;" @click="enrollFace">重拍</view>
-          </view>
-
-          <!-- 未录入：需上传 -->
+          <!-- 未录入：引导去合规录入页（先同意《告知同意书》） -->
           <view v-else-if="faceStatus === 'none'" class="face-enroll-area">
             <view class="face-upload-box" @click="enrollFace">
-              <image v-if="form.facePhotoUrl" :src="form.facePhotoUrl" class="fe-preview" mode="aspectFill" />
-              <view v-else class="fe-placeholder">
+              <view class="fe-placeholder">
                 <text class="fe-icon">📷</text>
-                <text class="fe-text">拍摄 / 上传人脸照片</text>
-                <text class="fe-tip">清晰正脸 · 用于AI核验</text>
+                <text class="fe-text">去录入人脸</text>
+                <text class="fe-tip">需先阅读并同意《告知同意书》</text>
               </view>
             </view>
-            <view class="face-warn">⚠️ 该学生尚未录入人脸，请拍照录入后方可离校核验</view>
+            <view class="face-warn">⚠️ 该学生尚未录入人脸。点击上方进入录入流程（监护人授权同意 → 拍照采集），完成后返回本页继续提交</view>
           </view>
 
           <view v-else class="face-loading">检查人脸档案中…</view>
@@ -272,6 +261,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
 import { request, uploadFile, assetUrl } from '../../api/request';
 
 const roleCode = uni.getStorageSync('ycd_roleCode') || 'PARENT';
@@ -413,6 +403,11 @@ onMounted(async () => {
   }
 });
 
+// 从人脸录入页返回后，重新检查该生人脸档案状态
+onShow(() => {
+  if (form.studentNo) checkFace(form.studentNo);
+});
+
 const choosePhoto = () => {
   uni.chooseImage({
     count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'],
@@ -421,7 +416,8 @@ const choosePhoto = () => {
       uni.showLoading({ title: '上传中…' });
       try {
         const data = await uploadFile(tempPath, 'proof');
-        form.proofPhotoUrl = assetUrl(data.url);
+        // DB 存相对路径，展示时由 proofDisplayUrl 计算鉴权地址
+        form.proofPhotoUrl = data.url;
       } catch (e) {
         form.proofPhotoUrl = tempPath; // 兜底用本地预览
       } finally {
@@ -430,29 +426,20 @@ const choosePhoto = () => {
     }
   });
 };
+const proofDisplayUrl = computed(() =>
+  form.proofPhotoUrl && form.proofPhotoUrl.indexOf('/uploads/') >= 0
+    ? assetUrl(form.proofPhotoUrl) : form.proofPhotoUrl);
 
-// 录入人脸（拍照上传到临时存储，确认请假后才正式写入档案）
+// 录入人脸：跳转合规录入页（先阅读《告知同意书》并同意，再采集）
 const enrollFace = () => {
   if (!form.studentId) return;
-  uni.chooseImage({
-    count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'],
-    success: async (res) => {
-      const tempPath = res.tempFilePaths[0];
-      uni.showLoading({ title: '上传照片中…' });
-      try {
-        const up = await uploadFile(tempPath, 'face');
-        // 暂存：只存URL到表单，不写入 face_record
-        form.facePhotoUrl = up.url;
-        facePhotoUrl.value = assetUrl(up.url);
-        faceStatus.value = 'temp'; // 临时状态：已拍照但未提交
-        uni.showToast({ title: '✓ 照片已暂存，确认请假后正式录入', icon: 'none', duration: 2000 });
-      } catch (e) {
-        uni.showToast({ title: e.message || '上传失败', icon: 'none' });
-      } finally {
-        uni.hideLoading();
-      }
-    }
-  });
+  const q = `studentId=${form.studentId}`
+    + `&studentNo=${encodeURIComponent(form.studentNo || '')}`
+    + `&studentName=${encodeURIComponent(form.studentName || '')}`
+    + `&classId=${form.classId || ''}`
+    + `&className=${encodeURIComponent(form.className || '')}`
+    + `&back=1`;
+  uni.navigateTo({ url: `/pages/face/enroll?${q}` });
 };
 
 const submit = async () => {
@@ -460,12 +447,8 @@ const submit = async () => {
   if (!form.reason.trim()) { uni.showToast({ title: '请填写请假原因', icon: 'none' }); return; }
   if (!form.leaveStart) { uni.showToast({ title: '请选择完整的离校日期和时间', icon: 'none' }); return; }
   if (!form.leaveEnd) { uni.showToast({ title: '请选择完整的返校日期和时间', icon: 'none' }); return; }
-  if (faceStatus.value !== 'has' && faceStatus.value !== 'temp') {
-    uni.showToast({ title: '请先为学生录入人脸（门卫核验离校必需）', icon: 'none', duration: 2500 });
-    return;
-  }
-  if (!form.facePhotoUrl) {
-    uni.showToast({ title: '请先为学生录入人脸（门卫核验离校必需）', icon: 'none', duration: 2500 });
+  if (faceStatus.value !== 'has') {
+    uni.showToast({ title: '请先完成人脸录入（含监护人授权同意）', icon: 'none', duration: 2500 });
     return;
   }
   loading.value = true;

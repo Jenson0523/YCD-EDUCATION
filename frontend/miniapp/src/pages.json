@@ -52,6 +52,13 @@
       }
     },
     {
+      "path": "pages/face/enroll",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "人脸录入"
+      }
+    },
+    {
       "path": "pages/leave/approve",
       "style": {
         "navigationStyle": "custom",

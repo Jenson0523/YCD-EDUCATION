@@ -1,0 +1,48 @@
+# ═══════════════════════════════════════════════════════════
+# 云辰盾 生产环境配置模板
+# 用法：复制到服务器 /opt/ycd/application-prod.yml 并修改下方标注项，
+#       启动时指定 --spring.profiles.active=prod（见 ycd-api.service）
+# 注意：本文件含密码，仅放服务器，勿提交到 Git！
+# ═══════════════════════════════════════════════════════════
+server:
+  port: 8081
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # ★ 改成服务器 MySQL 地址与库名
+    url: jdbc:mysql://127.0.0.1:3306/ycd_education?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ycd            # ★ 改：生产库账号（不要用root）
+    password: CHANGE_ME      # ★ 改：强密码
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 文件上传目录（人脸/凭证/签字），放数据盘并定期备份
+app:
+  upload:
+    dir: /data/ycd/uploads   # ★ 服务器目录，需先 mkdir -p 并赋权
+
+# 人脸识别（虹软离线SDK）
+face:
+  api:
+    provider: arcsoft
+    threshold: 80.0
+    fallback-threshold: 85.0
+    arcsoft:
+      app-id: CHANGE_ME      # ★ 虹软 APP_ID
+      sdk-key: CHANGE_ME     # ★ 虹软 SDK_KEY（Linux版！与Windows不同）
+      lib-path: /data/ycd/arcsoft   # ★ 放 libarcsoft_face*.so 的目录
+
+sa-token:
+  token-name: Authorization
+  timeout: 2592000
+  is-log: false
+
+# 生产关闭接口文档（避免暴露）
+knife4j:
+  enable: false
+springdoc:
+  api-docs:
+    enabled: false

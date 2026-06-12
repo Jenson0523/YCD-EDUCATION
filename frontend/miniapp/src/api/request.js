@@ -7,12 +7,22 @@
  * 作者: 云辰盾项目组
  */
 
+// ═══════════ 生产发布配置（部署云服务器后启用）═══════════
+// 上线步骤见 deploy/DEPLOY.md 第六节：
+//   1. 把 PROD_API 改成你的 https 域名（须ICP备案 + 微信后台配置合法域名）
+//   2. PROD_MODE 改为 true
+//   3. npm run build:mp-weixin 重新编译并上传发布
+const PROD_MODE = false;
+const PROD_API = 'https://ycd.example.com/api';
+
+// ── 本地开发配置 ──
 // 电脑局域网IP（真机调试时手机通过此IP访问后端，需与手机同一WiFi）
 const LAN_IP = '192.168.0.40';
 const PORT = 8081;
 
 // 根据运行环境自动选择 host
 function resolveBaseUrl() {
+  if (PROD_MODE) return PROD_API; // 生产：统一走云服务器 https
   let platform = '';
   try {
     // 优先用新版 API
@@ -31,15 +41,22 @@ function resolveBaseUrl() {
 }
 
 const BASE_URL = resolveBaseUrl();
-// 不含 /api 的主机根地址，用于拼接 /uploads 等静态资源
-const HOST_ROOT = BASE_URL.replace(/\/api$/, '');
 
-/** 将后端返回的相对图片路径(/uploads/...)拼成完整可访问URL */
+/**
+ * 受保护图片访问URL。
+ * 人脸/凭证/签字等敏感图片不再公开静态暴露，统一经
+ * /api/files/preview?path=...&token=... 鉴权后输出（防人脸数据泄露）。
+ * 兼容历史数据中存的绝对URL（含 /uploads/ 的会被改写为鉴权地址）。
+ */
 export function assetUrl(path) {
   if (!path) return '';
-  if (/^https?:\/\//.test(path)) return path;
-  if (path.charAt(0) === '/') return HOST_ROOT + path;
-  return HOST_ROOT + '/' + path;
+  let p = String(path);
+  // 历史绝对URL：提取其中的 /uploads/ 相对部分
+  const i = p.indexOf('/uploads/');
+  if (i >= 0) p = p.substring(i);
+  else if (/^https?:\/\//.test(p)) return p; // 非本系统外链原样返回
+  const token = uni.getStorageSync('ycd_token') || '';
+  return `${BASE_URL}/files/preview?path=${encodeURIComponent(p)}&token=${encodeURIComponent(token)}`;
 }
 
 /** 上传图片文件，返回 { url, absoluteUrl } */
