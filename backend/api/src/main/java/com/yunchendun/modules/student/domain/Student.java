@@ -29,4 +29,6 @@ public class Student extends BaseEntity {
     private String tags;
     private String guardianName;
     private String guardianMobileEncrypted;
+    private Integer parentCreateAccount;
+    private Long parentUserId;
 }
