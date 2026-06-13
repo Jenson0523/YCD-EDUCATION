@@ -131,11 +131,14 @@ public class LeaveApplicationController {
     public ApiResponse<List<LeaveApplication>> todayValid() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1);
+        // 有效判断改为"请假时段与今天有交集"，而非仅"今天开始的"，
+        // 这样跨天假条、以及 leaveEnd 缺失的假条今天也能被门卫看到
         List<LeaveApplication> list = leaveMapper.selectList(
                 new LambdaQueryWrapper<LeaveApplication>()
                         .in(LeaveApplication::getStatus, "APPROVED", "TEMP_PENDING", "DEPARTED")
-                        .ge(LeaveApplication::getLeaveStart, startOfDay)
-                        .lt(LeaveApplication::getLeaveStart, endOfDay)
+                        .lt(LeaveApplication::getLeaveStart, endOfDay)   // 开始时间 < 明天0点
+                        .and(w -> w.ge(LeaveApplication::getLeaveEnd, startOfDay) // 结束时间 >= 今天0点
+                                .or().isNull(LeaveApplication::getLeaveEnd))
                         .orderByAsc(LeaveApplication::getLeaveStart));
         fillApplicantLabels(list);
         return ApiResponse.ok(list);
