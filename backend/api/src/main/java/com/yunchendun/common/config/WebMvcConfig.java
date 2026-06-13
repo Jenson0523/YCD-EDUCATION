@@ -3,9 +3,14 @@ package com.yunchendun.common.config;
 import com.yunchendun.common.interceptor.LoginInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.resource.PathResourceResolver;
+
+import java.io.IOException;
 
 /**
  * 模块: 平台级 / common
@@ -38,6 +43,25 @@ public class WebMvcConfig implements WebMvcConfigurer {
      * 安全说明：/uploads/** 公开静态映射已移除——人脸照片等敏感图片
      * 一律经 /api/files/preview 鉴权访问，防止 URL 泄露导致人脸数据外泄。
      */
+
+    /** SPA 路由回退：对非 API/非静态资源路径，返回 index.html 交给 Vue Router 处理 */
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/**")
+                .addResourceLocations("classpath:/static/")
+                .resourceChain(true)
+                .addResolver(new PathResourceResolver() {
+                    @Override
+                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                        Resource requested = location.createRelative(resourcePath);
+                        if (requested.exists() && requested.isReadable()) return requested;
+                        // Vue Router history 模式回退
+                        Resource fallback = location.createRelative("index.html");
+                        if (fallback.exists() && fallback.isReadable()) return fallback;
+                        return null;
+                    }
+                });
+    }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
