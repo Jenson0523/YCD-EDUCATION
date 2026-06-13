@@ -171,7 +171,7 @@
             <el-descriptions-item label="返校时间">{{ fmtDt(detail.leaveEnd) }}</el-descriptions-item>
             <el-descriptions-item label="请假原因" :span="2">{{ detail.reason }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.proofPhotoUrl" label="凭证/病例" :span="2">
-              <el-image :src="detail.proofPhotoUrl" style="width:200px;height:auto;" :preview-src-list="[detail.proofPhotoUrl]" fit="contain" />
+              <el-image :src="resolveUrl(detail.proofPhotoUrl)" style="width:200px;height:auto;" :preview-src-list="[resolveUrl(detail.proofPhotoUrl)]" preview-teleported fit="contain" />
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -188,7 +188,7 @@
             <el-descriptions-item label="审批时间">{{ fmtDt(detail.approvedAt) }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.approveRemark" label="审批意见" :span="2">{{ detail.approveRemark }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.approveSignatureUrl" label="审批签字" :span="2">
-              <el-image :src="detail.approveSignatureUrl" style="max-width:300px;height:80px;border:1px solid #e5e7eb;border-radius:6px;padding:4px;" fit="contain" />
+              <el-image :src="resolveUrl(detail.approveSignatureUrl)" style="max-width:300px;height:80px;border:1px solid #e5e7eb;border-radius:6px;padding:4px;" :preview-src-list="[resolveUrl(detail.approveSignatureUrl)]" preview-teleported fit="contain" />
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -212,7 +212,7 @@
             </el-table-column>
             <el-table-column label="刷脸照片" width="100">
               <template #default="{ row }">
-                <el-image v-if="row.capturePhotoUrl" :src="row.capturePhotoUrl" style="width:60px;height:60px;border-radius:6px;" :preview-src-list="[row.capturePhotoUrl]" fit="cover" />
+                <el-image v-if="row.capturePhotoUrl" :src="resolveUrl(row.capturePhotoUrl)" style="width:60px;height:60px;border-radius:6px;" :preview-src-list="[resolveUrl(row.capturePhotoUrl)]" preview-teleported fit="cover" />
                 <span v-else style="color:#cbd5e1;">—</span>
               </template>
             </el-table-column>
@@ -240,6 +240,20 @@
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { http } from '../../api/http';
+
+/**
+ * 受保护图片地址：/uploads/** 已不再公开，统一经
+ * /api/files/preview?path=...&token=... 鉴权访问（签字/凭证/人脸抓拍）。
+ */
+const resolveUrl = (url) => {
+  if (!url) return '';
+  let p = String(url);
+  const i = p.indexOf('/uploads/');
+  if (i >= 0) p = p.substring(i);
+  else if (p.startsWith('http')) return p;
+  const token = localStorage.getItem('ycd_token') || '';
+  return `/api/files/preview?path=${encodeURIComponent(p)}&token=${encodeURIComponent(token)}`;
+};
 
 const activeTab = ref('normal');
 const rows = ref([]);

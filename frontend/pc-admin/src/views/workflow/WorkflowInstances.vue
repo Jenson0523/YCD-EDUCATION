@@ -165,8 +165,8 @@
             <el-descriptions-item label="预计返校">{{ fmt(detail.leaveEnd) }}</el-descriptions-item>
             <el-descriptions-item label="请假原因" :span="2">{{ detail.reason || '—' }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.proofPhotoUrl" label="凭证附件" :span="2">
-              <el-image :src="detail.proofPhotoUrl" style="max-width:300px;max-height:200px;border-radius:8px;"
-                :preview-src-list="[detail.proofPhotoUrl]" fit="contain" />
+              <el-image :src="resolveUrl(detail.proofPhotoUrl)" style="max-width:300px;max-height:200px;border-radius:8px;"
+                :preview-src-list="[resolveUrl(detail.proofPhotoUrl)]" preview-teleported fit="contain" />
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -185,9 +185,9 @@
               {{ detail.approveRemark }}
             </el-descriptions-item>
             <el-descriptions-item v-if="detail.approveSignatureUrl" label="审批签字" :span="2">
-              <el-image :src="detail.approveSignatureUrl"
+              <el-image :src="resolveUrl(detail.approveSignatureUrl)"
                 style="max-width:320px;height:80px;border:1px solid #e5e7eb;border-radius:6px;padding:6px;background:#fff;"
-                fit="contain" />
+                :preview-src-list="[resolveUrl(detail.approveSignatureUrl)]" preview-teleported fit="contain" />
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -226,9 +226,9 @@
             </el-table-column>
             <el-table-column label="抓拍照片" width="90">
               <template #default="{ row }">
-                <el-image v-if="row.capturePhotoUrl" :src="row.capturePhotoUrl"
+                <el-image v-if="row.capturePhotoUrl" :src="resolveUrl(row.capturePhotoUrl)"
                   style="width:56px;height:56px;border-radius:6px;object-fit:cover;"
-                  :preview-src-list="[row.capturePhotoUrl]" />
+                  :preview-src-list="[resolveUrl(row.capturePhotoUrl)]" preview-teleported />
                 <span v-else style="color:#cbd5e1;">—</span>
               </template>
             </el-table-column>
@@ -248,6 +248,17 @@ import { onMounted, ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Download } from '@element-plus/icons-vue';
 import { http } from '../../api/http';
+
+/** 受保护图片：/uploads 已不公开，统一经 /api/files/preview 鉴权访问 */
+const resolveUrl = (url) => {
+  if (!url) return '';
+  let p = String(url);
+  const i = p.indexOf('/uploads/');
+  if (i >= 0) p = p.substring(i);
+  else if (p.startsWith('http')) return p;
+  const token = localStorage.getItem('ycd_token') || '';
+  return `/api/files/preview?path=${encodeURIComponent(p)}&token=${encodeURIComponent(token)}`;
+};
 
 // ═══ 列表数据 ═══
 const rows = ref([]);
