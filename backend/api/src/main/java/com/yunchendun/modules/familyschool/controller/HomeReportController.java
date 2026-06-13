@@ -105,6 +105,8 @@ public class HomeReportController {
                 : "老师已查看并跟进您" + report.getReportDate() + "的居家报备。");
         msg.setBizType("HOME_REPORT_REPLY");
         msg.setBizId(id);
+        msg.setPriority(2);          // 重要
+        msg.setTargetRole("PARENT"); // 仅家长可见
         messageMapper.insert(msg);
 
         return ApiResponse.ok(null);

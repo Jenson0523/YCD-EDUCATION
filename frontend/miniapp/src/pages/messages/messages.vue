@@ -35,9 +35,58 @@
         <text class="empty-sub">请假审批通知、系统消息会出现在这里</text>
       </view>
 
+      <!-- Tab 切换：待办 / 通知 -->
+      <view v-else class="tab-bar">
+        <view class="tab-item" :class="{ active: tab === 'pending' }" @tap="tab = 'pending'">
+          <text>待办</text>
+          <text v-if="pendingCount > 0" class="tab-badge">{{ pendingCount }}</text>
+        </view>
+        <view class="tab-item" :class="{ active: tab === 'all' }" @tap="tab = 'all'">
+          <text>全部消息</text>
+        </view>
+      </view>
+
+      <!-- 待办 Tab：展示真实待审批请假（与角标、审批页同源，杜绝不一致） -->
+      <view v-if="tab === 'pending'">
+        <view v-if="pendingLeaves.length === 0" class="empty-small">
+          <text class="empty-icon-sm">🎉</text>
+          <text class="empty-title-sm">暂无待办事项</text>
+        </view>
+        <view v-else class="list">
+          <view
+            v-for="lv in pendingLeaves" :key="lv.id"
+            class="msg-card unread"
+            hover-class="msg-hover"
+            @tap="openLeave(lv)"
+          >
+            <view class="urgent-strip" v-if="lv.isTemp === 1"></view>
+            <view class="msg-left">
+              <view class="msg-icon-box biz-LEAVE_APPLY">
+                <text class="msg-icon">{{ lv.isTemp === 1 ? '⚡' : '📝' }}</text>
+              </view>
+            </view>
+            <view class="msg-body">
+              <view class="msg-top">
+                <text class="msg-title">{{ lv.studentName }} · {{ lv.leaveType === 'SICK' ? '病假' : '事假' }}
+                  <text class="prio-tag" :class="lv.isTemp === 1 ? 'prio-urgent' : 'prio-important'">
+                    {{ lv.isTemp === 1 ? '临时补批' : '待审批' }}
+                  </text>
+                </text>
+                <text class="msg-time">{{ fmtTime(lv.createdAt) }}</text>
+              </view>
+              <text class="msg-content">{{ lv.applicantLabel || '' }} · 事由：{{ lv.reason }}</text>
+              <view class="msg-meta">
+                <text class="msg-type">{{ lv.className || '' }}</text>
+                <text class="go-approve">去审批 ›</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
       <view v-else class="list">
         <view
-          v-for="msg in list" :key="msg.id"
+          v-for="msg in displayList" :key="msg.id"
           class="msg-card"
           :class="{ unread: msg.isRead === 0, urgent: msg.priority === 1 }"
           hover-class="msg-hover"
@@ -78,13 +127,41 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { request } from '../../api/request';
+
+const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+const isTeacher = roleCode === 'HEAD_TEACHER' || roleCode === 'TEACHER';
 
 const list = ref([]);
 const loading = ref(true);
 const pageNo = ref(1);
 const hasMore = ref(false);
+const tab = ref(isTeacher ? 'pending' : 'all');
+const pendingCount = ref(0);
+
+// 待办列表：真实待审批请假（与角标 pending-count、审批页同源，保证一致）
+const pendingLeaves = ref([]);
+const displayList = computed(() => list.value);
+
+const loadPendingLeaves = async () => {
+  if (!isTeacher) { pendingLeaves.value = []; return; }
+  try {
+    const [a, b] = await Promise.all([
+      request({ url: '/leave/applications?status=PENDING&pageSize=50' }),
+      request({ url: '/leave/applications?status=TEMP_PENDING&pageSize=50' })
+    ]);
+    const merge = [...(a?.records || []), ...(b?.records || [])];
+    // 按创建时间倒序
+    merge.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
+    pendingLeaves.value = merge;
+    pendingCount.value = merge.length; // 角标与列表完全一致
+  } catch { pendingLeaves.value = []; }
+};
+
+const openLeave = (lv) => {
+  uni.navigateTo({ url: `/pages/leave/detail?id=${lv.id}` });
+};
 
 const load = async (append = false) => {
   if (!append) loading.value = true;
@@ -104,6 +181,8 @@ const load = async (append = false) => {
   } finally {
     loading.value = false;
   }
+  // 同时拉取真实待办（教师），角标与列表同源
+  await loadPendingLeaves();
 };
 
 const loadMore = () => {
@@ -126,25 +205,55 @@ const openMsg = async (msg) => {
       msg.isRead = 1;
     } catch {}
   }
-  // 点击跳转到关联业务页面
+  // 点击跳转到关联业务页面（按角色权限智能跳转）
+  const roleCode = uni.getStorageSync('ycd_roleCode') || '';
   if (msg.bizType === 'LEAVE_APPLY' || msg.bizType === 'LEAVE_APPROVED' ||
       msg.bizType === 'LEAVE_REJECTED' || msg.bizType === 'TEMP_SUPPLEMENT') {
-    // 根据 bizType 智能跳转：待审批→审批页，已审批→详情页
+    // 待审批/临时补批：仅班主任/教师可进入审批页
     if (msg.bizType === 'LEAVE_APPLY' || msg.bizType === 'TEMP_SUPPLEMENT') {
-      uni.navigateTo({ url: '/pages/leave/approve' });
+      if (roleCode === 'HEAD_TEACHER' || roleCode === 'TEACHER') {
+        uni.navigateTo({ url: '/pages/leave/approve' });
+      } else {
+        // 家长/门卫等：跳转详情页（只读查看）
+        uni.navigateTo({ url: `/pages/leave/detail?id=${msg.bizId}` });
+      }
     } else {
+      // 已批准/已驳回 → 所有人可看详情
       uni.navigateTo({ url: `/pages/leave/detail?id=${msg.bizId}` });
     }
+  } else if (msg.bizType === 'LEAVE_DEPART' || msg.bizType === 'LEAVE_ABNORMAL') {
+    // 离校通知/异常预警 → 跳转详情
+    uni.navigateTo({ url: `/pages/leave/detail?id=${msg.bizId}` });
+  } else if (msg.bizType === 'HOME_REPORT_REPLY') {
+    // 居家报备跟进 → 跳转到家校互通详情（如有）否则仅查看
+    uni.showToast({ title: '请在"我的请假"中查看详情', icon: 'none' });
   }
 };
 
 const bizIcon = (type) => {
-  const map = { LEAVE_APPLY: '📝', LEAVE_APPROVED: '✅', LEAVE_REJECTED: '❌', TEMP_SUPPLEMENT: '⚡' };
+  const map = {
+    LEAVE_APPLY: isTeacher ? '📝' : '📋',
+    LEAVE_APPROVED: '✅',
+    LEAVE_REJECTED: '❌',
+    TEMP_SUPPLEMENT: isTeacher ? '⚡' : '📋',
+    LEAVE_DEPART: '🚶',
+    LEAVE_ABNORMAL: '⚠️',
+    HOME_REPORT_REPLY: '💬'
+  };
   return map[type] || '📬';
 };
 
 const bizLabel = (type) => {
-  const map = { LEAVE_APPLY: '待审批', LEAVE_APPROVED: '已批准', LEAVE_REJECTED: '已驳回', TEMP_SUPPLEMENT: '临时补批' };
+  if (isTeacher) {
+    const map = { LEAVE_APPLY: '待审批', LEAVE_APPROVED: '已批准', LEAVE_REJECTED: '已驳回',
+      TEMP_SUPPLEMENT: '临时补批', LEAVE_DEPART: '离校通知', LEAVE_ABNORMAL: '异常预警',
+      HOME_REPORT_REPLY: '居家报备' };
+    return map[type] || '系统消息';
+  }
+  // 家长/门卫：不显示"待审批"标签
+  const map = { LEAVE_APPLY: '请假申请', LEAVE_APPROVED: '已批准', LEAVE_REJECTED: '已驳回',
+    TEMP_SUPPLEMENT: '临时离校', LEAVE_DEPART: '离校通知', LEAVE_ABNORMAL: '异常预警',
+    HOME_REPORT_REPLY: '居家报备' };
   return map[type] || '系统消息';
 };
 
@@ -176,6 +285,25 @@ onMounted(() => load());
 
 /* Content */
 .content { padding: 24rpx 28rpx; }
+
+/* Tab Bar */
+.tab-bar { display: flex; gap: 16rpx; margin-bottom: 20rpx; }
+.tab-item {
+  flex: 1; text-align: center; padding: 16rpx 0; border-radius: 12rpx;
+  background: #fff; font-size: 26rpx; color: #64748B; position: relative;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
+}
+.tab-item.active { background: #1E2F50; color: #fff; font-weight: 600; }
+.tab-badge {
+  display: inline-block; background: #DC2626; color: #fff; font-size: 18rpx;
+  min-width: 32rpx; height: 32rpx; line-height: 32rpx; border-radius: 16rpx;
+  text-align: center; margin-left: 8rpx; padding: 0 8rpx;
+}
+
+/* Empty Small */
+.empty-small { text-align: center; padding: 60rpx 0; }
+.empty-icon-sm { display: block; font-size: 56rpx; margin-bottom: 12rpx; }
+.empty-title-sm { font-size: 26rpx; color: #94A3B8; }
 
 /* Skeleton */
 .sk-item { display: flex; gap: 18rpx; padding: 24rpx; background: #fff; border-radius: 16rpx; margin-bottom: 14rpx; }
@@ -224,6 +352,7 @@ onMounted(() => load());
 .msg-content { display: block; font-size: 24rpx; color: #64748B; margin-top: 8rpx; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .msg-meta { display: flex; align-items: center; gap: 12rpx; margin-top: 12rpx; }
 .msg-type { font-size: 20rpx; color: #94A3B8; background: #F1F5F9; padding: 2rpx 12rpx; border-radius: 20rpx; }
+.go-approve { margin-left: auto; font-size: 22rpx; color: #2B7FFF; font-weight: 600; }
 .msg-dot { width: 12rpx; height: 12rpx; border-radius: 50%; background: #3B6CB5; }
 
 /* Priority Tags */

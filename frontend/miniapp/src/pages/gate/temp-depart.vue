@@ -107,8 +107,17 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, onMounted } from 'vue';
 import { request } from '../../api/request';
+
+// 角色守卫：仅门卫可进入
+onMounted(() => {
+  const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+  if (roleCode !== 'GATE') {
+    uni.showToast({ title: '仅门卫可操作', icon: 'none' });
+    setTimeout(() => uni.navigateBack(), 1500);
+  }
+});
 
 const loading = ref(false);
 const filling = ref(false);

@@ -58,7 +58,7 @@
         <view class="stats-card">
           <view class="stat-item" hover-class="stat-hover" @tap.stop="navTodo">
             <text class="stat-num">{{ stats.today }}</text>
-            <text class="stat-label">待办事项</text>
+            <text class="stat-label">{{ todoLabel }}</text>
             <text class="stat-arrow">›</text>
           </view>
           <view class="stat-divider"></view>
@@ -254,18 +254,28 @@ const loadStats = async () => {
     stats.value.unread = r?.count || 0;
   } catch {}
   try {
-    if (roleCode.value === 'HEAD_TEACHER') {
-      const d = await request({ url: '/leave/applications?status=PENDING&pageSize=1' });
-      stats.value.today = d?.total || 0;
+    // 教师/班主任：使用待审批数；家长/门卫/学生：显示0（没有审批权限）
+    if (roleCode.value === 'HEAD_TEACHER' || roleCode.value === 'TEACHER') {
+      const d = await request({ url: '/sys/messages/pending-count' });
+      stats.value.today = d?.count || 0;
     } else if (roleCode.value === 'GATE') {
       const d = await request({ url: '/leave/applications/today-valid' });
       stats.value.today = (d || []).length;
     } else {
-      const d = await request({ url: '/leave/applications?role=my&pageSize=1' });
-      stats.value.today = d?.total || 0;
+      // 家长/学生等：统计与自己相关的请假记录数
+      try {
+        const d = await request({ url: '/leave/applications?role=my&pageSize=1' });
+        stats.value.today = d?.total || 0;
+      } catch { stats.value.today = 0; }
     }
   } catch {}
 };
+
+const todoLabel = computed(() => {
+  if (roleCode.value === 'HEAD_TEACHER' || roleCode.value === 'TEACHER') return '待审批';
+  if (roleCode.value === 'GATE') return '今日离校';
+  return '我的申请';
+});
 
 // 点击待办事项跳转
 const navTodo = () => {

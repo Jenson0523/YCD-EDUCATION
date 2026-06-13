@@ -61,6 +61,11 @@ public class GateVerificationController {
     @Operation(summary = "执行人脸核验")
     @PostMapping("/verify")
     public ApiResponse<Map<String, Object>> verify(@RequestBody Map<String, Object> body) {
+        // 角色校验：仅门卫/管理员可执行核验放行
+        String opRole = dataPermissionHelper.current().getRoleCode();
+        if (!"GATE".equals(opRole) && !"ADMIN".equals(opRole)) {
+            return ApiResponse.fail(403, "仅门卫可执行人脸核验放行");
+        }
         String studentNo = (String) body.get("studentNo");
         String capturePhotoUrl = (String) body.get("capturePhotoUrl");
         String verifyType = body.getOrDefault("verifyType", "DEPART").toString();
@@ -165,10 +170,12 @@ public class GateVerificationController {
             msg.setBizType("LEAVE_DEPART");
             msg.setBizId(leave.getId());
             msg.setIsRead(0);
+            msg.setPriority(1);    // 紧急
+            msg.setTargetRole("PARENT"); // 仅家长可见
             msg.setTenantId(1L);
             messageMapper.insert(msg);
         } else if (!"PASS".equals(result)) {
-            // 异常预警推送
+            // 异常预警推送（仅管理员和教师可见）
             SysMessage warn = new SysMessage();
             warn.setReceiverId(0L); // 广播给管理员/班主任
             warn.setSenderId(verifierId);
@@ -177,6 +184,8 @@ public class GateVerificationController {
             warn.setBizType("LEAVE_ABNORMAL");
             warn.setBizId(log.getId());
             warn.setIsRead(0);
+            warn.setPriority(1);          // 紧急
+            warn.setTargetRole("TEACHER"); // 仅教师/管理员可见（安全预警）
             warn.setTenantId(1L);
             messageMapper.insert(warn);
         }

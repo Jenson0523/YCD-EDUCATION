@@ -122,6 +122,13 @@ const filteredList = computed(() => {
 });
 
 onMounted(async () => {
+  // 角色守卫：仅门卫可查看今日假条
+  const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+  if (roleCode !== 'GATE') {
+    uni.showToast({ title: '仅门卫可查看', icon: 'none' });
+    setTimeout(() => uni.navigateBack(), 1500);
+    return;
+  }
   try {
     list.value = await request({ url: '/leave/applications/today-valid' }) || [];
   } catch (e) {

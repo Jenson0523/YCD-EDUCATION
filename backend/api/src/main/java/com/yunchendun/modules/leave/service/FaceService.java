@@ -16,11 +16,12 @@ import java.util.*;
  * 人脸识别服务（门卫核验）。
  *
  * 引擎策略（按优先级自动择优）：
- *   1. 虹软 ArcSoft 离线SDK（face.api.provider=arcsoft 且激活成功）— 生产精准引擎
- *   2. 图像相似度过渡引擎（ImageHashFaceEngine）— 无需凭证，真实图像比对
+ *   1. 百度智能云人脸识别API（face.api.provider=baidu 且密钥有效）— 🟢免费额度充足，全平台通用
+ *   2. 腾讯云人脸识别API（face.api.provider=tencent 且密钥有效）— 付费云端引擎，全平台通用
+ *   3. 虹软 ArcSoft 离线SDK（face.api.provider=arcsoft 且激活成功）— Windows生产引擎（不推荐Linux）
+ *   4. 图像相似度过渡引擎（ImageHashFaceEngine）— 无需凭证，本地比对，兜底
  *
- * 关键点：分数来自对"实际上传照片"的真实比对，不再是与照片无关的假分数，
- *        从根本上杜绝"随便一张照片都能高分匹配"。
+ * 推荐：使用 baidu 模式（新用户10万次/月免费额度），Linux 服务器直接部署。
  */
 @Slf4j
 @Service
@@ -29,10 +30,11 @@ public class FaceService {
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
 
-    @Value("${face.api.provider:image}")
+    /** 引擎提供商标识：baidu / tencent / arcsoft / image */
+    @Value("${face.api.provider:baidu}")
     private String provider;
 
-    /** ArcSoft 等真实人脸引擎的通过阈值（同一个人置信度） */
+    /** 腾讯云等云端引擎的通过阈值 */
     @Value("${face.api.threshold:80.0}")
     private double threshold;
 
@@ -42,22 +44,37 @@ public class FaceService {
 
     private final FaceRecordMapper faceRecordMapper;
     private final List<FaceRecognitionEngine> engines;
+    private final TencentCloudFaceEngine tencentEngine;
+    private final BaiduCloudFaceEngine baiduEngine;
 
-    public FaceService(FaceRecordMapper faceRecordMapper, List<FaceRecognitionEngine> engines) {
+    public FaceService(FaceRecordMapper faceRecordMapper, List<FaceRecognitionEngine> engines,
+                       TencentCloudFaceEngine tencentEngine, BaiduCloudFaceEngine baiduEngine) {
         this.faceRecordMapper = faceRecordMapper;
         this.engines = engines;
+        this.tencentEngine = tencentEngine;
+        this.baiduEngine = baiduEngine;
     }
 
-    /** 选出当前应使用的引擎：优先 ArcSoft（就绪），否则过渡引擎 */
+    /** 选出当前应使用的引擎：优先百度云 → 腾讯云 → ArcSoft → 图像哈希兜底 */
     private FaceRecognitionEngine engine() {
-        FaceRecognitionEngine fallback = null;
-        for (FaceRecognitionEngine e : engines) {
-            if ("arcsoft".equalsIgnoreCase(provider) && e.name().startsWith("arcsoft") && e.isReady()) {
-                return e;
-            }
-            if (e.name().startsWith("image-hash")) fallback = e;
+        // 1. 百度智能云引擎（推荐：免费额度10万次/月）
+        if ("baidu".equalsIgnoreCase(provider) && baiduEngine.isReady()) {
+            return baiduEngine;
         }
-        if (fallback != null) return fallback;
+        // 2. 腾讯云云端引擎
+        if ("tencent".equalsIgnoreCase(provider) && tencentEngine.isReady()) {
+            return tencentEngine;
+        }
+        // 3. 虹软 ArcSoft 离线引擎（仅 Windows，需 SDK）
+        if ("arcsoft".equalsIgnoreCase(provider)) {
+            for (FaceRecognitionEngine e : engines) {
+                if (e.name().startsWith("arcsoft") && e.isReady()) return e;
+            }
+        }
+        // 4. 图像哈希过渡引擎（兜底）
+        for (FaceRecognitionEngine e : engines) {
+            if (e.name().startsWith("image-hash")) return e;
+        }
         return engines.isEmpty() ? null : engines.get(0);
     }
 
@@ -123,20 +140,13 @@ public class FaceService {
         }
         double th = activeThreshold(eng);
 
-        // 提取一次抓拍特征
-        byte[] capFeature = eng.extractFeature(captured);
-        if (capFeature == null) {
-            log.warn("刷脸识别：抓拍照片未能提取特征（可能未检测到人脸）");
-            return Collections.emptyList();
-        }
-
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (FaceRecord r : library) {
             File enrolled = resolveImageFile(r.getFacePhotoUrl());
             if (enrolled == null) continue;
-            byte[] enrFeature = eng.extractFeature(enrolled);
-            if (enrFeature == null) continue;
-            double score = eng.compareFeature(capFeature, enrFeature);
+            // 统一用 compareImages：本地引擎走特征比对，云端引擎(百度/腾讯)走API直比，
+            // 避免云端 compareFeature 恒为0导致1:N全部识别失败
+            double score = eng.compareImages(captured, enrolled);
             if (score < th) continue; // 低于阈值不作为候选，杜绝误判
 
             Map<String, Object> m = new LinkedHashMap<>();

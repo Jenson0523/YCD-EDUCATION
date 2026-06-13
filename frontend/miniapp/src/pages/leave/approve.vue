@@ -408,7 +408,16 @@ const emptySub = computed(() => {
   return '';
 });
 
-onMounted(() => { load(); });
+onMounted(() => {
+  // 角色守卫：仅班主任/教师可进入审批页
+  const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+  if (roleCode !== 'HEAD_TEACHER' && roleCode !== 'TEACHER') {
+    uni.showToast({ title: '您没有审批权限', icon: 'none' });
+    setTimeout(() => uni.navigateBack(), 1500);
+    return;
+  }
+  load();
+});
 </script>
 
 <style scoped>

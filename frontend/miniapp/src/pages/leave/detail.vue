@@ -66,13 +66,13 @@
           <view class="ic-row"><text class="ic-k">核验方式</text><text class="ic-v">门卫人脸核验</text></view>
         </view>
 
-        <!-- 审批操作 -->
-        <view v-if="data && (data.status === 'PENDING' || data.status === 'TEMP_PENDING')" class="action-bar">
+        <!-- 审批操作（仅班主任/教师可见） -->
+        <view v-if="isTeacher && data && (data.status === 'PENDING' || data.status === 'TEMP_PENDING')" class="action-bar">
           <view class="btn-reject" @click="openReject">驳回</view>
           <view class="btn-approve" @click="openApprove">批准并签字</view>
         </view>
-        <!-- 人脸核验入口（已批准未离校，门卫用） -->
-        <view v-if="data && data.status === 'APPROVED' && !data.departAt" class="action-bar">
+        <!-- 人脸核验入口（仅门卫可操作） -->
+        <view v-if="isGate && data && data.status === 'APPROVED' && !data.departAt" class="action-bar">
           <view class="btn-verify" @click="goVerify">🔍 刷脸核验离校</view>
         </view>
         <view style="height: 60rpx;"></view>
@@ -150,6 +150,10 @@
 <script setup>
 import { ref, onMounted, getCurrentInstance } from 'vue';
 import { request, uploadFile, assetUrl } from '../../api/request';
+
+const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+const isTeacher = roleCode === 'HEAD_TEACHER' || roleCode === 'TEACHER';
+const isGate = roleCode === 'GATE';
 
 const statusBarH = ref(20);
 const loading = ref(true);

@@ -1,5 +1,6 @@
 package com.yunchendun.modules.student.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -9,6 +10,8 @@ import com.yunchendun.common.security.DataPermissionHelper;
 import com.yunchendun.modules.student.domain.Student;
 import com.yunchendun.modules.student.mapper.StudentMapper;
 import com.yunchendun.modules.student.service.StudentImportService;
+import com.yunchendun.system.domain.SysUser;
+import com.yunchendun.system.mapper.SysUserMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 模块: 学生学籍
@@ -31,6 +35,10 @@ public class StudentController {
     private final StudentMapper studentMapper;
     private final DataPermissionHelper dataPermissionHelper;
     private final StudentImportService studentImportService;
+    private final SysUserMapper sysUserMapper;
+
+    /** 拥有写权限的管理角色 */
+    private static final Set<String> WRITE_ROLES = Set.of("ADMIN", "PRINCIPAL", "ACADEMIC");
 
     @GetMapping
     public ApiResponse<IPage<Student>> page(@RequestParam(defaultValue = "1") long pageNo,
@@ -58,6 +66,7 @@ public class StudentController {
 
     @PostMapping
     public ApiResponse<Student> create(@RequestBody Student student) {
+        checkWritePermission();
         // 学籍号唯一校验
         Long dup = studentMapper.selectCount(new LambdaQueryWrapper<Student>()
                 .eq(Student::getStudentNo, student.getStudentNo()));
@@ -70,6 +79,7 @@ public class StudentController {
 
     @PutMapping("/{id}")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody Student student) {
+        checkWritePermission();
         student.setId(id);
         studentMapper.updateById(student);
         return ApiResponse.ok(null);
@@ -77,6 +87,7 @@ public class StudentController {
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
+        checkWritePermission();
         studentMapper.deleteById(id);
         return ApiResponse.ok(null);
     }
@@ -90,6 +101,16 @@ public class StudentController {
 
     @PostMapping("/import")
     public ApiResponse<Map<String, Object>> importExcel(@RequestParam("file") MultipartFile file) {
+        checkWritePermission();
         return ApiResponse.ok(studentImportService.importStudents(file));
+    }
+
+    /** 写操作权限校验：仅管理员/校长/教务可写 */
+    private void checkWritePermission() {
+        Long uid = StpUtil.getLoginIdAsLong();
+        SysUser user = sysUserMapper.selectById(uid);
+        if (user == null || user.getRoleCode() == null || !WRITE_ROLES.contains(user.getRoleCode())) {
+            throw new RuntimeException("无写操作权限");
+        }
     }
 }

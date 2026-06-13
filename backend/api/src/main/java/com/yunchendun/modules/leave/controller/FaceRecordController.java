@@ -72,22 +72,36 @@ public class FaceRecordController {
         return ApiResponse.ok(faceRecordMapper.selectPage(new Page<>(pageNo, pageSize), wrapper));
     }
 
-    /** 根据学生ID查询人脸档案 */
+    /** 根据学生ID查询人脸档案（按数据权限：家长限本人孩子/教师限本班/管理员门卫全部） */
     @Operation(summary = "查询某学生人脸档案（by studentId）")
     @GetMapping("/by-student/{studentId}")
     public ApiResponse<FaceRecord> getByStudent(@PathVariable Long studentId) {
+        if (!canAccessStudent(studentId)) return ApiResponse.fail(403, "无权查看该学生人脸档案");
         FaceRecord rec = faceRecordMapper.selectOne(
                 new LambdaQueryWrapper<FaceRecord>().eq(FaceRecord::getStudentId, studentId));
         return ApiResponse.ok(rec);
     }
 
-    /** 根据学籍号查询人脸档案（门卫核验专用） */
+    /** 根据学籍号查询人脸档案（按数据权限过滤，防止枚举他人档案） */
     @Operation(summary = "查询某学生人脸档案（by studentNo）")
     @GetMapping("/by-no/{studentNo}")
     public ApiResponse<FaceRecord> getByStudentNo(@PathVariable String studentNo) {
         FaceRecord rec = faceRecordMapper.selectOne(
                 new LambdaQueryWrapper<FaceRecord>().eq(FaceRecord::getStudentNo, studentNo));
+        if (rec != null && !canAccessStudent(rec.getStudentId())) {
+            return ApiResponse.fail(403, "无权查看该学生人脸档案");
+        }
         return ApiResponse.ok(rec);
+    }
+
+    /** 当前登录用户是否有权访问指定学生（家长=绑定孩子，教师=所辖班级，管理员/门卫=全部） */
+    private boolean canAccessStudent(Long studentId) {
+        if (studentId == null) return false;
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isSelf()) return !dp.hasNoStudent() && dp.getStudentIds().contains(studentId);
+        if (dp.isClass()) return !dp.hasNoClass()
+                && dataPermissionHelper.studentIdsByClasses(dp.getClassIds()).contains(studentId);
+        return true; // ALL / GATE_VALID
     }
 
     /** 人脸采集《告知同意书》全文（采集前必须展示给用户阅读） */
@@ -215,6 +229,11 @@ public class FaceRecordController {
     @Operation(summary = "人脸比对（门卫核验用）")
     @PostMapping("/compare")
     public ApiResponse<Map<String, Object>> compare(@RequestBody Map<String, String> body) {
+        // 仅门卫/管理员可比对（核验操作）
+        String role = dataPermissionHelper.current().getRoleCode();
+        if (!"GATE".equals(role) && !"ADMIN".equals(role)) {
+            return ApiResponse.fail(403, "仅门卫可执行人脸比对核验");
+        }
         String studentNo = body.get("studentNo");
         String capturePhotoUrl = body.get("capturePhotoUrl");
         return ApiResponse.ok(faceService.compare(studentNo, capturePhotoUrl));
@@ -234,6 +253,11 @@ public class FaceRecordController {
     @Operation(summary = "刷脸识别（人脸库1:N检索）")
     @PostMapping("/recognize")
     public ApiResponse<List<Map<String, Object>>> recognize(@RequestBody Map<String, String> body) {
+        // 隐私保护：1:N 全库检索仅门卫/管理员可用，家长/学生不得扫描他人
+        String role = dataPermissionHelper.current().getRoleCode();
+        if (!"GATE".equals(role) && !"ADMIN".equals(role)) {
+            return ApiResponse.fail(403, "仅门卫可使用刷脸识别");
+        }
         String capturePhotoUrl = body.get("capturePhotoUrl");
 
         // 查今日已核验离校的学籍号（刷脸识别时排除已离校学生）

@@ -64,7 +64,7 @@ public class LeaveApplicationController {
 
     // ======================== 查询 ========================
 
-    /** 我的请假记录（家长/老师：我发起的；班主任：我班级的待审批） */
+    /** 请假申请列表（支持状态/班级/姓名/日期范围筛选，按角色隔离数据） */
     @Operation(summary = "请假申请列表")
     @GetMapping
     public ApiResponse<Page<LeaveApplication>> list(
@@ -73,13 +73,24 @@ public class LeaveApplicationController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String role) {
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         Long uid = StpUtil.getLoginIdAsLong();
         LambdaQueryWrapper<LeaveApplication> w = new LambdaQueryWrapper<LeaveApplication>()
                 .eq(StringUtils.hasText(status), LeaveApplication::getStatus, status)
                 .eq(classId != null, LeaveApplication::getClassId, classId)
-                .like(StringUtils.hasText(keyword), LeaveApplication::getStudentName, keyword)
-                .orderByDesc(LeaveApplication::getCreatedAt);
+                .like(StringUtils.hasText(keyword), LeaveApplication::getStudentName, keyword);
+        
+        // 日期范围筛选：按 leave_start 过滤
+        if (StringUtils.hasText(startDate)) {
+            w.ge(LeaveApplication::getLeaveStart, LocalDate.parse(startDate).atStartOfDay());
+        }
+        if (StringUtils.hasText(endDate)) {
+            w.le(LeaveApplication::getLeaveStart, LocalDate.parse(endDate).plusDays(1).atStartOfDay());
+        }
+        
+        w.orderByDesc(LeaveApplication::getCreatedAt);
 
         // 数据权限过滤
         DataPermission dp = dataPermissionHelper.current();
@@ -130,12 +141,28 @@ public class LeaveApplicationController {
         return ApiResponse.ok(list);
     }
 
-    /** 单条详情（含申请人姓名、核验记录、刷脸照片） */
+    /** 单条详情（含申请人姓名、核验记录、刷脸照片）- 按角色校验数据权限 */
     @Operation(summary = "请假申请详情")
     @GetMapping("/{id}")
     public ApiResponse<Map<String, Object>> detail(@PathVariable Long id) {
         LeaveApplication leave = leaveMapper.selectById(id);
         if (leave == null) return ApiResponse.ok(null);
+
+        // 数据权限校验
+        Long uid = StpUtil.getLoginIdAsLong();
+        DataPermission dp = dataPermissionHelper.current();
+        if (dp.isSelf()) {
+            // 家长/学生：只能看自己关联学生的请假
+            if (leave.getStudentId() == null || !dp.getStudentIds().contains(leave.getStudentId())) {
+                return ApiResponse.fail(403, "您无权查看此请假记录");
+            }
+        } else if (dp.isClass()) {
+            // 班主任/教师：只能看自己管辖班级学生的请假
+            if (leave.getClassId() == null || !dp.getClassIds().contains(leave.getClassId())) {
+                return ApiResponse.fail(403, "您无权查看此请假记录");
+            }
+        }
+        // GATE / ALL：不限制
 
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         // 基础字段
@@ -212,17 +239,37 @@ public class LeaveApplicationController {
 
     // ======================== 审批 ========================
 
-    /** 班主任审批（通过/驳回） */
+    /** 班主任审批（通过/驳回）- 仅限班主任/教师操作其管辖班级的学生 */
     @Operation(summary = "审批请假申请")
     @PutMapping("/{id}/approve")
     public ApiResponse<Void> approve(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Long uid = StpUtil.getLoginIdAsLong();
+        SysUser approver = sysUserMapper.selectById(uid);
+        if (approver == null) return ApiResponse.fail(401, "请先登录");
+
+        // 角色校验：仅班主任/教师可审批
+        String approverRole = approver.getRoleCode();
+        if (!"HEAD_TEACHER".equals(approverRole) && !"TEACHER".equals(approverRole)) {
+            return ApiResponse.fail(403, "您没有审批权限，仅班主任和教师可审批");
+        }
+
         LeaveApplication app = leaveMapper.selectById(id);
         if (app == null) return ApiResponse.fail(404, "记录不存在");
         if (!"PENDING".equals(app.getStatus()) && !"TEMP_PENDING".equals(app.getStatus())) {
             return ApiResponse.fail(400, "当前状态不可审批");
         }
+
+        // 班级绑定校验：审批人必须是该学生所在班级的教师
+        if (app.getClassId() != null) {
+            Long count = teacherClassMapper.selectCount(new LambdaQueryWrapper<TeacherClass>()
+                    .eq(TeacherClass::getTeacherUserId, uid)
+                    .eq(TeacherClass::getClassId, app.getClassId()));
+            if (count == null || count == 0) {
+                return ApiResponse.fail(403, "您不是该学生所在班级的教师，无权审批");
+            }
+        }
+
         String action = body.get("action"); // APPROVED / REJECTED
-        Long uid = StpUtil.getLoginIdAsLong();
         app.setApprovedBy(uid);
         app.setApprovedAt(LocalDateTime.now());
         app.setApproveRemark(body.get("remark"));
@@ -268,12 +315,33 @@ public class LeaveApplicationController {
     @PostMapping("/temp-depart")
     public ApiResponse<LeaveApplication> tempDepart(@RequestBody LeaveApplication req) {
         Long uid = StpUtil.getLoginIdAsLong();
+        // 角色校验：仅门卫/管理员可临时放行
+        String opRole = dataPermissionHelper.current().getRoleCode();
+        if (!"GATE".equals(opRole) && !"ADMIN".equals(opRole)) {
+            return ApiResponse.fail(403, "仅门卫可登记临时放行");
+        }
+        // studentId/姓名/班级缺失时从学籍号补全（前端正常会传，这里兜底防止脏数据/500）
+        if (req.getStudentId() == null && StringUtils.hasText(req.getStudentNo())) {
+            Student stu = studentMapper.selectOne(new LambdaQueryWrapper<Student>()
+                    .eq(Student::getStudentNo, req.getStudentNo()).last("LIMIT 1"));
+            if (stu != null) {
+                req.setStudentId(stu.getId());
+                if (!StringUtils.hasText(req.getStudentName())) req.setStudentName(stu.getName());
+                if (req.getClassId() == null) req.setClassId(stu.getClassId());
+                if (!StringUtils.hasText(req.getClassName())) req.setClassName(stu.getClassName());
+            }
+        }
+        if (req.getStudentId() == null) {
+            return ApiResponse.fail(400, "未找到该学籍号对应的学生，无法临时放行");
+        }
         req.setApplicantId(uid);
         req.setApplicantRole("GATE");
         req.setLeaveNo(genLeaveNo());
         req.setIsTemp(1);
         req.setStatus("TEMP_PENDING");
         req.setTenantId(1L);
+        if (!StringUtils.hasText(req.getLeaveType())) req.setLeaveType("PERSONAL"); // 临时放行默认事假
+        if (!StringUtils.hasText(req.getReason())) req.setReason("门卫临时紧急放行");
         req.setClassId(resolveClassId(req)); // classId 缺失时从学生档案补全
         LocalDateTime now = LocalDateTime.now();
         req.setDepartAt(now);
@@ -305,16 +373,36 @@ public class LeaveApplicationController {
 
     // ======================== 待补批工单 ========================
 
-    /** 查询待补批工单列表（班主任） */
+    /** 查询待补批工单列表（班主任：只看自己管辖班级的临时放行） */
     @Operation(summary = "临时补批工单列表")
     @GetMapping("/supplements")
     public ApiResponse<Page<TempSupplementOrder>> supplements(
             @RequestParam(defaultValue = "1") int pageNo,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String status) {
+        Long uid = StpUtil.getLoginIdAsLong();
+        SysUser user = sysUserMapper.selectById(uid);
+        String role = user != null ? user.getRoleCode() : "";
+
         LambdaQueryWrapper<TempSupplementOrder> w = new LambdaQueryWrapper<TempSupplementOrder>()
                 .eq(StringUtils.hasText(status), TempSupplementOrder::getSupplementStatus, status)
                 .orderByAsc(TempSupplementOrder::getDeadline);
+
+        // 班主任/教师：只查自己班级的补批工单
+        if ("HEAD_TEACHER".equals(role) || "TEACHER".equals(role)) {
+            List<Long> classIds = dataPermissionHelper.loadTeacherClassIds(uid);
+            if (classIds.isEmpty()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            // 通过 leave_app_id 关联 LeaveApplication → class_id 过滤
+            List<LeaveApplication> classLeaves = leaveMapper.selectList(
+                    new LambdaQueryWrapper<LeaveApplication>()
+                            .in(LeaveApplication::getClassId, classIds)
+                            .eq(LeaveApplication::getIsTemp, 1));
+            if (classLeaves.isEmpty()) return ApiResponse.ok(new Page<>(pageNo, pageSize));
+            List<Long> leaveAppIds = classLeaves.stream()
+                    .map(LeaveApplication::getId).distinct().collect(java.util.stream.Collectors.toList());
+            w.in(TempSupplementOrder::getLeaveAppId, leaveAppIds);
+        }
+        // GATE/ADMIN：查看全部
         return ApiResponse.ok(supplementMapper.selectPage(new Page<>(pageNo, pageSize), w));
     }
 

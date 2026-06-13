@@ -11,9 +11,9 @@ spring:
     import: optional:file:./arcsoft-local.yml
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/ycd_education?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root123
+    url: jdbc:mysql://alois.bond:3306/ycd_education?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: appuser
+    password: App@123456
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -51,19 +51,65 @@ sa-token:
 knife4j:
   enable: true
 
-# 人脸识别配置
-#   provider=arcsoft : 优先用虹软离线SDK（需安装SDK+填app-id/sdk-key，见 docs/ARCSOFT_SETUP.md）
-#                      未安装时自动回退到"图像相似度过渡引擎"（真实图像比对，杜绝随机照片误判）
-#   threshold        : 真实人脸引擎(ArcSoft)通过阈值（同一人置信度，建议80）
-#   fallback-threshold: 过渡图像引擎通过阈值（更严格，建议85，降低误判）
+# ──────────────────────────────────────────────
+# 人脸识别配置（百度智能云·免费默认 · 三步开通）
+# ──────────────────────────────────────────────
+# 四种引擎（按优先级自动择优）：
+#
+#   ① baidu（🟢免费·默认）— 百度智能云人脸识别 API
+#      ✅ 新用户 10万次/月免费额度（教育场景足够）
+#      ✅ 真实 AI 人脸特征比对，精度高
+#      ✅ OAuth2 简单认证，全平台 (Win/Linux/macOS)
+#      ⚠️ 需百度智能云账号 + 创建应用获取密钥
+#      💡 推荐首选 → 开通地址 https://console.bce.baidu.com/ai/#/ai/face/overview/index
+#
+#   ② tencent（付费）— 腾讯云人脸识别 API
+#      ✅ 高精度、全平台，按量计费约 0.002元/次
+#      ⚠️ 需腾讯云账号 + 密钥 + TC3-HMAC-SHA256 签名
+#      💡 适合：已有腾讯云生态的用户
+#
+#   ③ arcsoft（付费·仅Windows）— 虹软离线SDK
+#      ✅ 离线运行、无网络依赖
+#      ⚠️ 仅 Windows、需安装 SDK + 激活
+#      💡 适合：Windows 内网环境
+#
+#   ④ image-hash（兜底）— 图像感知哈希本地比对
+#      ✅ 零配置、零费用、全平台
+#      ⚠️ 非真正人脸特征比对（不同角度/光照可能降分）
+#      💡 自动兜底：当所选引擎密钥无效时自动降级使用
+#
+#   threshold         : 正式 AI 引擎通过阈值（建议 80）
+#   fallback-threshold: image-hash 引擎通过阈值（更严格，建议 85）
+#
+# 三步开通百度智能云：
+#   Step 1：访问 https://console.bce.baidu.com/ai/#/ai/face/overview/index
+#   Step 2：创建应用 → 勾选"人脸识别" → 获取 API Key + Secret Key
+#   Step 3：设置环境变量后重启：
+#        export FACE_PROVIDER=baidu
+#        export BAIDU_API_KEY=你的API_Key
+#        export BAIDU_SECRET_KEY=你的Secret_Key
+#        # 免费额度自动生效，无需付费！
+#   Step 4：调用 GET /api/leave/face/engine-info 确认引擎切换成功
+# ──────────────────────────────────────────────
 face:
   api:
-    provider: arcsoft
+    provider: ${FACE_PROVIDER:baidu}
     threshold: 80.0
     fallback-threshold: 85.0
+    baidu:
+      # 密钥写入 backend/api/arcsoft-local.yml（已gitignore）或设环境变量，勿提交仓库
+      api-key: ${BAIDU_API_KEY:}
+      secret-key: ${BAIDU_SECRET_KEY:}
+      group-id: ${BAIDU_FACE_GROUP:ycd_students}
+    tencent:
+      # 腾讯云密钥 → 设置环境变量 TENCENT_SECRET_ID / TENCENT_SECRET_KEY
+      secret-id: ${TENCENT_SECRET_ID:}
+      secret-key: ${TENCENT_SECRET_KEY:}
+      region: ${TENCENT_REGION:ap-guangzhou}
+      group-id: ${TENCENT_FACE_GROUP:ycd-students}
+      quality-control: 2
     arcsoft:
-      # 密钥不要写在这里（仓库公开）。请写入 backend/api/arcsoft-local.yml（已gitignore）
-      # 或设置环境变量 ARCSOFT_APP_ID / ARCSOFT_SDK_KEY
+      # 虹软离线引擎（仅Windows）
       app-id: ${ARCSOFT_APP_ID:}
       sdk-key: ${ARCSOFT_SDK_KEY:}
       lib-path: ${ARCSOFT_LIB_PATH:./libs/arcsoft}

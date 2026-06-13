@@ -229,6 +229,13 @@ const fmtDt = (dt) => dt ? String(dt).replace('T', ' ').slice(5, 16) : '—';
 const targetStudentNo = ref(''); // 从今日假条"刷脸放行"带入的目标学生
 
 onMounted(() => {
+  // 角色守卫：仅门卫可进入人脸核验页
+  const roleCode = uni.getStorageSync('ycd_roleCode') || '';
+  if (roleCode !== 'GATE') {
+    uni.showToast({ title: '仅门卫可操作核验', icon: 'none' });
+    setTimeout(() => uni.navigateBack(), 1500);
+    return;
+  }
   try {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : uni.getSystemInfoSync();
     statusBarH.value = info.statusBarHeight || 20;
