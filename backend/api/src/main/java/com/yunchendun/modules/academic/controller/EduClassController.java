@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunchendun.common.api.ApiResponse;
 import com.yunchendun.modules.academic.domain.EduClass;
 import com.yunchendun.modules.academic.mapper.EduClassMapper;
+import com.yunchendun.system.domain.SysUser;
+import com.yunchendun.system.mapper.SysUserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class EduClassController {
 
     private final EduClassMapper classMapper;
+    private final SysUserMapper sysUserMapper;
 
     @GetMapping
     public ApiResponse<IPage<EduClass>> page(
@@ -29,11 +32,19 @@ public class EduClassController {
             @RequestParam(required = false) Long gradeId) {
         LambdaQueryWrapper<EduClass> wrapper = new LambdaQueryWrapper<>();
         if (gradeId != null) wrapper.eq(EduClass::getGradeId, gradeId);
+        wrapper.orderByAsc(EduClass::getGradeId, EduClass::getClassName);
         return ApiResponse.ok(classMapper.selectPage(Page.of(pageNo, pageSize), wrapper));
     }
 
     @PostMapping
     public ApiResponse<Void> create(@RequestBody EduClass eduClass) {
+        // 如果设置了班主任，同步姓名
+        if (eduClass.getHeadTeacherId() != null) {
+            SysUser teacher = sysUserMapper.selectById(eduClass.getHeadTeacherId());
+            if (teacher != null) {
+                eduClass.setHeadTeacherName(teacher.getRealName());
+            }
+        }
         classMapper.insert(eduClass);
         return ApiResponse.ok(null);
     }
@@ -41,6 +52,15 @@ public class EduClassController {
     @PutMapping("/{id}")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody EduClass eduClass) {
         eduClass.setId(id);
+        // 如果设置了班主任，同步姓名
+        if (eduClass.getHeadTeacherId() != null) {
+            SysUser teacher = sysUserMapper.selectById(eduClass.getHeadTeacherId());
+            if (teacher != null) {
+                eduClass.setHeadTeacherName(teacher.getRealName());
+            }
+        } else {
+            eduClass.setHeadTeacherName(null);
+        }
         classMapper.updateById(eduClass);
         return ApiResponse.ok(null);
     }

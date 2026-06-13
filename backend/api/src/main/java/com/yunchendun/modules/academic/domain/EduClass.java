@@ -20,5 +20,6 @@ public class EduClass extends BaseEntity {
     private String classCode;
     private String className;
     private Long headTeacherId;
+    private String headTeacherName;
     private Integer studentCount;
 }

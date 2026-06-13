@@ -20,6 +20,7 @@ public class SysUser extends BaseEntity {
     private String passwordHash;
     private String realName;
     private String mobileEncrypted;
+    private String gender;
     private String status;
     private String roleCode;
     private String avatar;

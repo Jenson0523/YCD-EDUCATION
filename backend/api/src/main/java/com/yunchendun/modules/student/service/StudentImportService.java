@@ -192,6 +192,8 @@ public class StudentImportService {
                 grd.setTenantId(1L);
                 grd.setGradeName(gradeName);
                 grd.setGradeCode(gradeName);
+                // 根据年级名称推断学段
+                grd.setSchoolSection(inferSchoolSection(gradeName));
                 grd.setSortOrder(1);
                 gradeMapper.insert(grd);
             }
@@ -263,6 +265,19 @@ public class StudentImportService {
     }
 
     // ==================== 工具方法 ====================
+
+    /**
+     * 根据年级名称推断学段
+     */
+    private String inferSchoolSection(String gradeName) {
+        if (gradeName == null) return "HIGH";
+        String n = gradeName.trim();
+        if (n.matches("^[一二三四五六]年级$") || n.matches("^小学.*")) return "PRIMARY";
+        if (n.matches("^[七八九]年级$") || n.matches("^初中.*")) return "MIDDLE";
+        if (n.matches("^[高一二三].*") || n.matches("^高中.*")) return "HIGH";
+        // 默认高中
+        return "HIGH";
+    }
 
     private boolean isBlank(Row row) {
         if (row == null) return true;
