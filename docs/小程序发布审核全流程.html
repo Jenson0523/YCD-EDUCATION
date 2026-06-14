@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>云辰盾小程序 · 线上发布审核访问全流程指南</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --primary: #1E2F50;
+    --accent: #D4A853;
+    --accent2: #E8C068;
+    --bg: #F0F4FA;
+    --card: #FFFFFF;
+    --text: #1a1a2e;
+    --text2: #555;
+    --border: #E8EDF5;
+    --success: #27ae60;
+    --warn: #f39c12;
+    --danger: #e74c3c;
+    --info: #3498db;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, var(--bg) 0%, #E8EDF5 100%);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.7;
+  }
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, #2a4570 100%);
+    color: #fff;
+    padding: 40px 0 30px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: rgba(212,168,83,0.12);
+  }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: 1px; }
+  .header p { color: rgba(255,255,255,0.72); margin-top: 8px; font-size: 15px; }
+  .header .badge {
+    display: inline-block;
+    background: rgba(212,168,83,0.22);
+    color: var(--accent2);
+    border: 1px solid rgba(212,168,83,0.35);
+    border-radius: 20px;
+    padding: 4px 16px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 30px 24px 60px; }
+  
+  /* 流程图卡片 */
+  .flow-card {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(30,47,80,0.07);
+    padding: 32px;
+    margin-bottom: 28px;
+    border: 1px solid var(--border);
+  }
+  .flow-card h2 {
+    font-size: 20px;
+    color: var(--primary);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .flow-card h2 .step-num {
+    background: var(--accent);
+    color: #fff;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  
+  /* Mermaid 流程图 */
+  .mermaid-wrap {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 20px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  .mermaid-wrap svg { max-width: 100%; height: auto; }
+  
+  /* 步骤详情 */
+  .step-detail {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(30,47,80,0.07);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .step-detail::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+    background: var(--accent);
+  }
+  .step-detail h3 {
+    font-size: 17px;
+    color: var(--primary);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-detail h3 .icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .step-detail h3 .icon.blue { background: #EBF5FB; }
+  .step-detail h3 .icon.green { background: #E8F8F0; }
+  .step-detail h3 .icon.orange { background: #FEF9E7; }
+  .step-detail h3 .icon.red { background: #FDEDEC; }
+  .step-detail h3 .icon.purple { background: #F4ECF7; }
+  
+  .detail-content { font-size: 14.5px; color: var(--text2); line-height: 1.9; }
+  .detail-content strong { color: var(--primary); }
+  .detail-content code {
+    background: #f0f4fa;
+    border: 1px solid #e8edf5;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    color: var(--danger);
+    font-family: "Fira Code", "Consolas", monospace;
+  }
+  .detail-content .tip {
+    background: #EBF5FB;
+    border-left: 3px solid var(--info);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 16px;
+    margin: 12px 0;
+    font-size: 13.5px;
+    color: #2e6da4;
+  }
+  .detail-content .warn-tip {
+    background: #FEF9E7;
+    border-left: 3px solid var(--warn);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 16px;
+    margin: 12px 0;
+    font-size: 13.5px;
+    color: #9a7d2e;
+  }
+  .detail-content .success-tip {
+    background: #E8F8F0;
+    border-left: 3px solid var(--success);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 16px;
+    margin: 12px 0;
+    font-size: 13.5px;
+    color: #1e8449;
+  }
+  
+  /* 配置表格 */
+  .config-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  .config-table th {
+    background: var(--primary);
+    color: #fff;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .config-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .config-table tr:nth-child(even) td { background: #f8fafc; }
+  .config-table tr:hover td { background: #f0f4fa; }
+  .tag {
+    display: inline-block;
+    background: #EBF5FB;
+    color: var(--info);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .tag.green { background: #E8F8F0; color: var(--success); }
+  .tag.orange { background: #FEF9E7; color: #9a7d2e; }
+  .tag.red { background: #FDEDEC; color: var(--danger); }
+  
+  /* 截图占位 */
+  .screenshot-placeholder {
+    background: linear-gradient(135deg, #f0f4fa 0%, #e8edf5 100%);
+    border: 2px dashed #c8d6e5;
+    border-radius: 12px;
+    text-align: center;
+    padding: 30px;
+    color: #95a5a6;
+    font-size: 13px;
+    margin: 14px 0;
+  }
+  
+  /* 底部 */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    color: #95a5a6;
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+  
+  /* 进度条 */
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .progress-step {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .progress-dot {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 2px solid var(--border);
+    background: #fff;
+    color: #aaa;
+    transition: all 0.3s;
+  }
+  .progress-dot.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .progress-dot.done {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+  }
+  .progress-line {
+    width: 32px; height: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .progress-line.done { background: var(--success); }
+  .progress-label {
+    font-size: 11px;
+    color: #aaa;
+    text-align: center;
+    margin-top: 6px;
+    width: 60px;
+    margin-left: -12px;
+  }
+  .progress-label.active { color: var(--accent); font-weight: 600; }
+  .progress-label.done { color: var(--success); }
+  
+  @media (max-width: 700px) {
+    .container { padding: 16px 10px; }
+    .flow-card, .step-detail { padding: 18px 14px; }
+    .header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🚀 云辰盾小程序 · 线上发布审核访问全流程</h1>
+  <p>从代码到上线的完整指南 · 适用于 uni-app Vue3 小程序</p>
+  <div class="badge">YCD-education v0.1.0 · 2026-06</div>
+</div>
+
+<div class="container">
+
+  <!-- 进度概览 -->
+  <div class="flow-card">
+    <h2><span class="step-num">📋</span> 全流程进度概览</h2>
+    <div class="progress-bar">
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot active">1</div>
+        <div class="progress-label active">前置准备</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">2</div>
+        <div class="progress-label">代码构建</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">3</div>
+        <div class="progress-label">开发者工具</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">4</div>
+        <div class="progress-label">上传代码</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">5</div>
+        <div class="progress-label">提交审核</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">6</div>
+        <div class="progress-label">审核通过</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">7</div>
+        <div class="progress-label">正式发布</div>
+      </div>
+      <div class="progress-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="progress-dot">8</div>
+        <div class="progress-label">用户访问</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 总流程图 -->
+  <div class="flow-card">
+    <h2><span class="step-num">🔀</span> 全流程架构图</h2>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+graph TB
+    subgraph PREP["① 前置准备"]
+        A1[注册微信小程序账号] --> A2[完成企业认证]
+        A2 --> A3[获取小程序 AppID]
+        A3 --> A4[配置服务器域名]
+        A4 --> A5[完善小程序基本信息]
+    end
+
+    subgraph BUILD["② 代码构建"]
+        B1[检查 manifest.json 配置] --> B2[配置 AppID]
+        B2 --> B3[npm run build:mp-weixin]
+        B3 --> B4[生成 dist/dev/mp-weixin]
+    end
+
+    subgraph DEVTOOL["③ 微信开发者工具"]
+        C1[导入项目] --> C2[编译预览]
+        C2 --> C3[真机调试]
+        C3 --> C4[检查体验版]
+    end
+
+    subgraph UPLOAD["④ 上传代码"]
+        D1[点击上传按钮] --> D2[填写版本号+备注]
+        D2 --> D3[上传为开发版]
+    end
+
+    subgraph AUDIT["⑤ 提交审核"]
+        E1[登录公众平台] --> E2[填写审核信息]
+        E2 --> E3[选择服务类目]
+        E3 --> E4[上传审核截图]
+        E4 --> E5[提交审核]
+    end
+
+    subgraph REVIEW["⑥ 微信审核"]
+        F1[等待审核 1-7 天] --> F2{审核结果}
+        F2 -->|通过| F3[审核通过通知]
+        F2 -->|驳回| F4[查看驳回原因]
+        F4 --> E2
+    end
+
+    subgraph PUBLISH["⑦ 正式发布"]
+        G1[进入版本管理] --> G2[点击发布按钮]
+        G2 --> G3[全量发布 / 灰度发布]
+    end
+
+    subgraph ACCESS["⑧ 用户访问"]
+        H1[微信搜索名称] --> H2[扫码进入]
+        H2 --> H3[分享卡片访问]
+    end
+
+    PREP --> BUILD
+    BUILD --> DEVTOOL
+    DEVTOOL --> UPLOAD
+    UPLOAD --> AUDIT
+    AUDIT --> REVIEW
+    REVIEW --> PUBLISH
+    PUBLISH --> ACCESS
+
+    style PREP fill:#EBF5FB,stroke:#3498db
+    style BUILD fill:#E8F8F0,stroke:#27ae60
+    style DEVTOOL fill:#FEF9E7,stroke:#f39c12
+    style UPLOAD fill:#F4ECF7,stroke:#8e44ad
+    style AUDIT fill:#FDEDEC,stroke:#e74c3c
+    style REVIEW fill:#FDEDEC,stroke:#e74c3c
+    style PUBLISH fill:#E8F8F0,stroke:#27ae60
+    style ACCESS fill:#EBF5FB,stroke:#3498db
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤1 -->
+  <div class="step-detail">
+    <h3><span class="icon blue">①</span> 前置准备（微信公众平台）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>完成小程序账号注册、认证、域名配置，确保具备发布条件。</p>
+      
+      <table class="config-table">
+        <tr><th>步骤</th><th>操作位置</th><th>详细说明</th></tr>
+        <tr>
+          <td>1. 注册账号</td>
+          <td>mp.weixin.qq.com</td>
+          <td>选择<strong>企业主体</strong>注册（个人主体无法使用支付、附近小程序等能力）</td>
+        </tr>
+        <tr>
+          <td>2. 企业认证</td>
+          <td>设置 → 基本设置 → 微信认证</td>
+          <td>支付 300 元/年认证费，认证后可使用更多接口能力</td>
+        </tr>
+        <tr>
+          <td>3. 获取 AppID</td>
+          <td>开发 → 开发管理 → 开发设置</td>
+          <td>复制 <strong>AppID（小程序ID）</strong>，填入 <code>manifest.json</code></td>
+        </tr>
+        <tr>
+          <td>4. 配置服务器域名</td>
+          <td>开发 → 开发管理 → 开发设置 → 服务器域名</td>
+          <td>添加 <code>https://node.alois.vip</code>（request合法域名、uploadFile合法域名、downloadFile合法域名）</td>
+        </tr>
+        <tr>
+          <td>5. 配置业务域名</td>
+          <td>开发 → 开发管理 → 开发设置 → 业务域名</td>
+          <td>添加 <code>node.alois.vip</code>（web-view 可使用）</td>
+        </tr>
+        <tr>
+          <td>6. 完善基本信息</td>
+          <td>设置 → 基本设置</td>
+          <td>上传头像、填写名称、简介、选择服务类目（教育-在线教育）</td>
+        </tr>
+      </table>
+
+      <div class="tip">
+        💡 <strong>提示：</strong>服务器域名必须支持 HTTPS，且已备案（中国大陆）。当前 <code>node.alois.vip</code> 已配置 SSL 证书，符合要求。
+      </div>
+      <div class="warn-tip">
+        ⚠️ <strong>注意：</strong>小程序名称一旦设置，修改需要重新审核。建议提前确定好名称。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤2 -->
+  <div class="step-detail">
+    <h3><span class="icon green">②</span> 代码构建（本地开发环境）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>配置 AppID，构建出符合微信小程序格式的生产包。</p>
+      
+      <p><strong>第一步：配置 manifest.json</strong></p>
+      <p>打开 <code>E:\jenson\claude\YCD-education\frontend\miniapp\src\manifest.json</code>，填入真实 AppID：</p>
+      <div class="tip">
+        📝 当前 manifest.json 中 <code>"appid": ""</code> 为空，需要替换为真实的微信小程序 AppID（在公众平台获取）
+      </div>
+
+      <p style="margin-top:18px"><strong>第二步：安装依赖并构建</strong></p>
+      <table class="config-table">
+        <tr><th>命令</th><th>说明</th></tr>
+        <tr><td><code>cd E:\jenson\claude\YCD-education\frontend\miniapp</code></td><td>进入小程序目录</td></tr>
+        <tr><td><code>npm install</code></td><td>安装依赖包</td></tr>
+        <tr><td><code>npm run build:mp-weixin</code></td><td>构建微信小程序生产包</td></tr>
+        <tr><td><code>dist/build/mp-weixin/</code></td><td>构建产物目录（上传用这个）</td></tr>
+        <tr><td><code>npm run dev:mp-weixin</code></td><td>开发模式（热更新，配合开发者工具）</td></tr>
+      </table>
+
+      <div class="success-tip">
+        ✅ <strong>构建成功标志：</strong>终端显示 <code>Build complete</code>，且 <code>dist/build/mp-weixin/</code> 目录生成了 <code>app.js</code>、<code>app.json</code>、<code>app.wxss</code> 等文件。
+      </div>
+      
+      <p style="margin-top:18px"><strong>第三步：检查 pages.json 页面配置</strong></p>
+      <p>确保所有页面路径正确，tabBar（如有）配置完整。当前小程序共 <strong>14 个页面</strong>，已配置在 <code>pages.json</code> 中。</p>
+    </div>
+  </div>
+
+  <!-- 步骤3 -->
+  <div class="step-detail">
+    <h3><span class="icon orange">③</span> 微信开发者工具（导入与调试）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>使用微信开发者工具导入项目，进行预览调试，确保无错误后再上传。</p>
+      
+      <table class="config-table">
+        <tr><th>操作</th><th>说明</th></tr>
+        <tr>
+          <td>下载开发者工具</td>
+          <td>https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html</td>
+        </tr>
+        <tr>
+          <td>导入项目</td>
+          <td>选择 <code>dist/build/mp-weixin/</code> 目录，填入 AppID，项目名称填「云辰盾」</td>
+        </tr>
+        <tr>
+          <td>编译预览</td>
+          <td>点击「编译」按钮，模拟器显示首页即正常</td>
+        </tr>
+        <tr>
+          <td>真机调试</td>
+          <td>点击「真机调试」，用手机微信扫码，验证实际效果</td>
+        </tr>
+        <tr>
+          <td>体验版</td>
+          <td>上传后为体验版，可在公众平台添加体验成员，扫码体验</td>
+        </tr>
+      </table>
+
+      <div class="warn-tip">
+        ⚠️ <strong>必查项：</strong>在开发者工具中，按 <code>Ctrl+Shift+M</code>（或点击「详情」→「本地设置」）确认：<br>
+        • 不校验合法域名已<strong>关闭</strong>（上线前必须关闭）<br>
+        • ES6 转 ES5 <strong>开启</strong><br>
+        • 上传代码时自动压缩<strong>开启</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤4 -->
+  <div class="step-detail">
+    <h3><span class="icon purple">④</span> 上传代码（开发者工具）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>将构建好的代码上传到微信公众平台，生成开发版本。</p>
+      
+      <p><strong>操作流程：</strong></p>
+      <ol style="padding-left:20px;line-height:2.2">
+        <li>在微信开发者工具中，点击顶部工具栏的 <strong>「上传」</strong> 按钮</li>
+        <li>填写 <strong>版本号</strong>：建议与 <code>manifest.json</code> 中 <code>versionName</code> 一致，如 <code>0.1.0</code></li>
+        <li>填写 <strong>项目备注</strong>：描述本次更新内容，如「首次提交，包含请假、人脸核验、消息中心等功能」</li>
+        <li>点击 <strong>「上传」</strong>，等待上传完成</li>
+        <li>上传成功后，登录 <a href="https://mp.weixin.qq.com" target="_blank">微信公众平台</a> → <strong>管理 → 版本管理</strong>，可以看到刚上传的开发版本</li>
+      </ol>
+
+      <div class="tip">
+        💡 <strong>版本号建议：</strong>遵循语义化版本规范（major.minor.patch），首次提交用 <code>1.0.0</code>，迭代用小版本号。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤5 -->
+  <div class="step-detail">
+    <h3><span class="icon red">⑤</span> 提交审核（微信公众平台）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>填写审核信息，提交微信团队审核。</p>
+      
+      <table class="config-table">
+        <tr><th>填写项</th><th>云辰盾小程序建议填写内容</th></tr>
+        <tr>
+          <td>服务类目</td>
+          <td><span class="tag">教育</span> <span class="tag">在线教育</span> 或 <span class="tag">教育-学校教育</span><br>需提供《办学许可证》或《事业单位法人证书》</td>
+        </tr>
+        <tr>
+          <td>标签</td>
+          <td>家校共育、请假管理、校园安全、人脸核验</td>
+        </tr>
+        <tr>
+          <td>功能页面</td>
+          <td>选择 <code>pages/index/index</code>（首页）</td>
+        </tr>
+        <tr>
+          <td>测试账号</td>
+          <td>提供一个可用的家长/教师测试账号（手机号+密码），方便审核人员登录体验</td>
+        </tr>
+        <tr>
+          <td>审核截图</td>
+          <td>上传小程序主要页面的截图（2-5 张），展示核心功能</td>
+        </tr>
+        <tr>
+          <td>隐私协议</td>
+          <td>需在 <code>pages/index/index</code> 或独立页面提供隐私保护指引</td>
+        </tr>
+      </table>
+
+      <div class="warn-tip">
+        ⚠️ <strong>常见驳回原因：</strong><br>
+        1. 服务类目与实际功能不符 → 选择正确的教育类目<br>
+        2. 没有提供测试账号 → 务必填写可登录的测试账号<br>
+        3. 隐私协议不完整 → 在首页增加「隐私政策」入口<br>
+        4. 个人主体提交了需要企业资质的功能 → 完成企业认证<br>
+        5. 内容涉及用户生成内容（UGC）但未配置内容安全审核 → 接入微信内容安全 API
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤6 -->
+  <div class="step-detail">
+    <h3><span class="icon orange">⑥</span> 微信审核（等待期）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>了解审核时间，处理可能的驳回。</p>
+      
+      <table class="config-table">
+        <tr><th>审核阶段</th><th>预计时间</th><th>说明</th></tr>
+        <tr><td>机器审核</td><td>几分钟</td><td>自动检查代码包大小、敏感词、API 权限等</td></tr>
+        <tr><td>人工审核</td><td>1-7 个工作日</td><td>审核人员实际体验功能，判断是否符合规范</td></tr>
+        <tr><td>加急审核</td><td>2 小时内</td><td>每月有 3 次加急机会（需申请）</td></tr>
+      </table>
+
+      <p style="margin-top:18px"><strong>审核结果通知：</strong></p>
+      <ul style="padding-left:20px;line-height:2">
+        <li>✅ <strong>审核通过</strong>：公众平台站内信 + 绑定的管理员微信通知，状态变为「审核通过，待发布」</li>
+        <li>❌ <strong>审核驳回</strong>：通知驳回原因，修改后重新提交审核（不占用新的审核配额）</li>
+      </ul>
+
+      <div class="tip">
+        💡 <strong>加快审核技巧：</strong>首次提交建议在周一至周四提交，避开周五和节假日，审核速度更快。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤7 -->
+  <div class="step-detail">
+    <h3><span class="icon green">⑦</span> 正式发布（公众平台操作）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>审核通过后，将小程序发布到线上，用户可搜索访问。</p>
+      
+      <p><strong>发布操作：</strong></p>
+      <ol style="padding-left:20px;line-height:2.2">
+        <li>登录 <a href="https://mp.weixin.qq.com" target="_blank">微信公众平台</a></li>
+        <li>进入 <strong>管理 → 版本管理</strong></li>
+        <li>在「审核通过」的版本卡片上，点击 <strong>「发布」</strong> 按钮</li>
+        <li>选择发布方式：
+          <ul style="padding-left:20px;margin-top:6px">
+            <li><strong>全量发布</strong>：所有用户立即使用新版本（推荐首次发布选择此方式）</li>
+            <li><strong>灰度发布</strong>：先对 5%/10%/20% 用户发布，观察无问题后全量（适合重要更新）</li>
+          </ul>
+        </li>
+        <li>发布成功后出现 <strong>「线上版本」</strong> 卡片</li>
+      </ol>
+
+      <div class="success-tip">
+        ✅ <strong>发布成功标志：</strong>「线上版本」显示当前版本号和发布时间，用户已可搜索并访问。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤8 -->
+  <div class="step-detail">
+    <h3><span class="icon blue">⑧</span> 用户访问（推广与运营）</h3>
+    <div class="detail-content">
+      <p><strong>目标：</strong>让用户找到并使用小程序。</p>
+      
+      <table class="config-table">
+        <tr><th>访问方式</th><th>操作说明</th></tr>
+        <tr>
+          <td>微信搜索</td>
+          <td>微信顶部搜索栏输入「云辰盾」，点击小程序结果进入</td>
+        </tr>
+        <tr>
+          <td>扫码进入</td>
+          <td>在公众平台「推广 → 小程序码」下载小程序码，打印或分享</td>
+        </tr>
+        <tr>
+          <td>分享卡片</td>
+          <td>用户点击右上角「...」→「分享」，发送小程序卡片给微信好友</td>
+        </tr>
+        <tr>
+          <td>公众号关联</td>
+          <td>若有微信公众号，可在公众平台关联小程序，公众号菜单跳转</td>
+        </tr>
+        <tr>
+          <td>附近小程序</td>
+          <td>在公众平台开启「附近的小程序」，按地理位置展示</td>
+        </tr>
+      </table>
+
+      <p style="margin-top:18px"><strong>数据分析：</strong></p>
+      <p>发布后，可在公众平台 <strong>统计</strong> 模块查看：访问人数、访问次数、留存率、页面访问深度等数据，指导后续迭代方向。</p>
+    </div>
+  </div>
+
+  <!-- 项目特定配置 -->
+  <div class="flow-card">
+    <h2><span class="step-num">⚙️</span> 云辰盾项目特定配置清单</h2>
+    <div class="detail-content">
+      <table class="config-table">
+        <tr><th>配置项</th><th>当前状态</th><th>操作建议</th></tr>
+        <tr>
+          <td>manifest.json → mp-weixin → appid</td>
+          <td><span class="tag orange">未配置</span> 当前为空字符串</td>
+          <td>填入真实 AppID</td>
+        </tr>
+        <tr>
+          <td>服务器域名</td>
+          <td><span class="tag green">已就绪</span> node.alois.vip 已配置 SSL</td>
+          <td>在公众平台添加为合法域名</td>
+        </tr>
+        <tr>
+          <td>隐私协议页面</td>
+          <td><span class="tag orange">待确认</span></td>
+          <td>建议新增 pages/privacy/privacy 页面</td>
+        </tr>
+        <tr>
+          <td>用户协议页面</td>
+          <td><span class="tag orange">待确认</span></td>
+          <td>建议新增 pages/agreement/agreement 页面</td>
+        </tr>
+        <tr>
+          <td>服务类目资质</td>
+          <td><span class="tag orange">待上传</span></td>
+          <td>准备办学许可证或事业单位法人证书</td>
+        </tr>
+        <tr>
+          <td>测试账号</td>
+          <td><span class="tag orange">待准备</span></td>
+          <td>提供一个家长角色测试账号（手机号+密码）</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- 快速命令 -->
+  <div class="flow-card">
+    <h2><span class="step-num">🛠️</span> 快速命令参考</h2>
+    <div class="detail-content">
+      <p><strong>构建生产包：</strong></p>
+      <div class="tip" style="margin:8px 0;font-family:monospace;font-size:13px;color:var(--text)">
+        cd /d E:\jenson\claude\YCD-education\frontend\miniapp<br>
+        npm install<br>
+        npm run build:mp-weixin<br>
+        # 产物目录：dist/build/mp-weixin/
+      </div>
+      <p style="margin-top:14px"><strong>开发模式（热更新）：</strong></p>
+      <div class="tip" style="margin:8px 0;font-family:monospace;font-size:13px;color:var(--text)">
+        npm run dev:mp-weixin<br>
+        # 然后在微信开发者工具中导入 dist/dev/mp-weixin/ 目录
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  云辰盾 · 家校共育共同体综合管理平台 &nbsp;|&nbsp; 小程序发布审核全流程指南 &nbsp;|&nbsp; 生成时间：2026-06-14
+</div>
+
+<script>
+  mermaid.initialize({ 
+    startOnLoad: true, 
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EBF5FB',
+      primaryTextColor: '#1E2F50',
+      primaryBorderColor: '#3498db',
+      lineColor: '#95a5a6',
+      secondaryColor: '#E8F8F0',
+      tertiaryColor: '#FEF9E7',
+      background: '#fff',
+      mainBkg: '#EBF5FB',
+      nodeBorder: '#3498db',
+      clusterBkg: '#f8fafc',
+      titleColor: '#1E2F50',
+      edgeLabelBackground: '#fff',
+      fontFamily: '"PingFang SC","Microsoft YaHei",sans-serif',
+      fontSize: '14px'
+    },
+    flowchart: { 
+      curve: 'basis',
+      padding: 20,
+      nodeSpacing: 50,
+      rankSpacing: 60
+    }
+  });
+</script>
+</body>
+</html>

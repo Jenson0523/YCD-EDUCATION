@@ -145,5 +145,28 @@ public class AuthController {
         return ApiResponse.ok(info);
     }
 
+    /** 修改密码（当前登录用户，需校验原密码） */
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePwdRequest req) {
+        StpUtil.checkLogin();
+        Long userId = StpUtil.getLoginIdAsLong();
+        SysUser user = userMapper.selectById(userId);
+        if (user == null) return ApiResponse.fail(401, "用户不存在");
+        if (!passwordEncoder.matches(req.oldPassword(), user.getPasswordHash())) {
+            return ApiResponse.fail(400, "原密码不正确");
+        }
+        if (req.newPassword() == null || req.newPassword().length() < 6) {
+            return ApiResponse.fail(400, "新密码至少6位");
+        }
+        SysUser upd = new SysUser();
+        upd.setId(userId);
+        upd.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        userMapper.updateById(upd);
+        // 改密后强制下线，需重新登录
+        StpUtil.logout();
+        return ApiResponse.ok(null);
+    }
+
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
+    public record ChangePwdRequest(@NotBlank String oldPassword, @NotBlank String newPassword) {}
 }

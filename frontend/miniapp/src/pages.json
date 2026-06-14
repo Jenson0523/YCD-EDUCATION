@@ -59,6 +59,13 @@
       }
     },
     {
+      "path": "pages/profile/change-password",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "修改密码"
+      }
+    },
+    {
       "path": "pages/leave/approve",
       "style": {
         "navigationStyle": "custom",

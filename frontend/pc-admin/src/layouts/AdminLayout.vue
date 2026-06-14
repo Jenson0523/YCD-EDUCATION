@@ -30,6 +30,7 @@
           <el-menu-item v-if="canAccess('ADMIN', 'HEAD_TEACHER', 'TEACHER', 'GATE')" index="/leave/ledger">请假台账</el-menu-item>
         </el-sub-menu>
         <el-menu-item v-if="canAccess('ADMIN', 'PRINCIPAL', 'ACADEMIC', 'HEAD_TEACHER', 'TEACHER')" index="/workflow/instances"><el-icon><Finished /></el-icon>审批中心</el-menu-item>
+        <el-menu-item v-if="canAccess('ADMIN', 'PRINCIPAL', 'ACADEMIC')" index="/sys/announcements"><el-icon><Bell /></el-icon>通知公告</el-menu-item>
         <el-sub-menu v-if="canAccess('ADMIN')" index="/sys">
           <template #title><el-icon><Setting /></el-icon>系统管理</template>
           <el-menu-item index="/sys/users">用户管理</el-menu-item>

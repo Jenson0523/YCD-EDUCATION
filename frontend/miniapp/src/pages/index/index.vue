@@ -107,18 +107,42 @@
       <view class="footer">
         <text class="brand-name">云辰盾 · YUNCHENDUN</text>
         <text class="brand-slogan">智慧家校共育 · 安全离校管理</text>
-        <view class="logout-btn" hover-class="logout-press" @tap="handleLogout">
-          <text class="logout-text">退出登录</text>
+        <view class="footer-actions">
+          <view class="footer-btn" hover-class="logout-press" @tap="nav('/pages/profile/change-password')">
+            <text class="footer-btn-text">修改密码</text>
+          </view>
+          <view class="logout-btn" hover-class="logout-press" @tap="handleLogout">
+            <text class="logout-text">退出登录</text>
+          </view>
         </view>
       </view>
 
       <view style="height: 60rpx;"></view>
     </scroll-view>
+
+    <!-- 通知公告弹窗 -->
+    <view v-if="popupMsg" class="anno-mask" @tap="closePopup">
+      <view class="anno-card" @tap.stop>
+        <view class="anno-head">
+          <text class="anno-bell">📢</text>
+          <text class="anno-title">{{ popupMsg.title }}</text>
+        </view>
+        <scroll-view scroll-y class="anno-body">
+          <text class="anno-content">{{ popupMsg.content }}</text>
+        </scroll-view>
+        <view class="anno-time">{{ (popupMsg.createdAt || '').replace('T',' ').slice(0,16) }}</view>
+        <view class="anno-actions">
+          <view class="anno-btn-ghost" hover-class="anno-press" @tap="viewPopupDetail">查看全部</view>
+          <view class="anno-btn-primary" hover-class="anno-press" @tap="closePopup">我知道了</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
 import { request } from '../../api/request';
 
 const statusBarH = ref(20);
@@ -295,6 +319,34 @@ const navMessages = () => {
   uni.navigateTo({ url: '/pages/messages/messages' });
 };
 
+// ── 通知公告弹窗 ──
+const popupMsg = ref(null);
+
+const checkPopup = async () => {
+  try {
+    const list = await request({ url: '/sys/messages/popup' });
+    if (list && list.length > 0) {
+      popupMsg.value = list[0]; // 一次弹一条，关闭后下次进入再弹下一条
+    } else {
+      popupMsg.value = null;
+    }
+  } catch {}
+};
+
+const closePopup = async () => {
+  if (popupMsg.value) {
+    try { await request({ url: `/sys/messages/${popupMsg.value.id}/read`, method: 'PUT' }); } catch {}
+  }
+  popupMsg.value = null;
+  loadStats();      // 关闭后刷新未读数
+};
+
+const viewPopupDetail = async () => {
+  await closePopup();
+  uni.navigateTo({ url: '/pages/messages/messages' });
+};
+
+let clockTimer = null;
 onMounted(() => {
   try {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : uni.getSystemInfoSync();
@@ -305,9 +357,15 @@ onMounted(() => {
     return;
   }
   updateClock();
-  setInterval(updateClock, 30000);
+  clockTimer = setInterval(updateClock, 30000);
   loadMyInfo();
+});
+
+// 每次显示首页都刷新角标（实时更新：审批/处理后返回自动刷新）+ 检查新公告弹窗
+onShow(() => {
+  if (!uni.getStorageSync('ycd_token')) return;
   loadStats();
+  checkPopup();
 });
 
 const nav = (url) => uni.navigateTo({ url });
@@ -441,6 +499,24 @@ const handleLogout = () => {
   background: #fff; border: 1rpx solid #FEE2E2; border-radius: 14rpx;
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
 }
-.logout-press { background: #FFF5F5; }
+.logout-press { opacity: 0.85; }
 .logout-text { font-size: 26rpx; color: #EF4444; letter-spacing: 2rpx; }
+.footer-actions { display: flex; gap: 20rpx; justify-content: center; margin-top: 8rpx; }
+.footer-btn { padding: 18rpx 40rpx; background: #fff; border: 1rpx solid #E2E8F0; border-radius: 14rpx; }
+.footer-btn-text { font-size: 26rpx; color: #475569; }
+.logout-btn { padding: 18rpx 40rpx; background: #fff; border: 1rpx solid #FECACA; border-radius: 14rpx; }
+
+/* 通知公告弹窗 */
+.anno-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; display: flex; align-items: center; justify-content: center; }
+.anno-card { width: 600rpx; background: #fff; border-radius: 24rpx; overflow: hidden; box-shadow: 0 20rpx 60rpx rgba(0,0,0,0.3); }
+.anno-head { display: flex; align-items: center; gap: 14rpx; padding: 32rpx 32rpx 16rpx; background: linear-gradient(135deg, #1947C8, #2B7FFF); }
+.anno-bell { font-size: 36rpx; }
+.anno-title { flex: 1; font-size: 32rpx; font-weight: 700; color: #fff; }
+.anno-body { max-height: 480rpx; padding: 28rpx 32rpx; }
+.anno-content { font-size: 28rpx; color: #374151; line-height: 1.7; white-space: pre-wrap; }
+.anno-time { padding: 0 32rpx 16rpx; font-size: 22rpx; color: #cbd5e1; }
+.anno-actions { display: flex; gap: 16rpx; padding: 0 32rpx 32rpx; }
+.anno-btn-ghost { flex: 1; height: 84rpx; line-height: 84rpx; text-align: center; font-size: 28rpx; color: #2B7FFF; background: #EFF6FF; border-radius: 16rpx; }
+.anno-btn-primary { flex: 1; height: 84rpx; line-height: 84rpx; text-align: center; font-size: 28rpx; color: #fff; font-weight: 600; background: linear-gradient(135deg,#1947C8,#2B7FFF); border-radius: 16rpx; }
+.anno-press { opacity: 0.85; }
 </style>

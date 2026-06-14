@@ -12,8 +12,8 @@
 //   1. 把 PROD_API 改成你的 https 域名（须ICP备案 + 微信后台配置合法域名）
 //   2. PROD_MODE 改为 true
 //   3. npm run build:mp-weixin 重新编译并上传发布
-const PROD_MODE = false;
-const PROD_API = 'https://ycd.example.com/api';
+const PROD_MODE = true;
+const PROD_API = 'https://node.alois.vip/api';
 
 // ── 本地开发配置 ──
 // 电脑局域网IP（真机调试时手机通过此IP访问后端，需与手机同一WiFi）

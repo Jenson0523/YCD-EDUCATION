@@ -25,6 +25,7 @@ const routes = [
       { path: 'student/students', name: 'Students', component: () => import('../views/student/StudentList.vue'), meta: { roles: ['ADMIN', 'PRINCIPAL', 'HEAD_TEACHER', 'TEACHER'] } },
       { path: 'workflow/instances', name: 'WorkflowInstances', component: () => import('../views/workflow/WorkflowInstances.vue'), meta: { roles: ['ADMIN', 'PRINCIPAL', 'ACADEMIC', 'HEAD_TEACHER', 'TEACHER'] } },
       { path: 'sys/users', name: 'SysUsers', component: () => import('../views/system/UserManagement.vue'), meta: { roles: ['ADMIN'] } },
+      { path: 'sys/announcements', name: 'Announcements', component: () => import('../views/system/Announcement.vue'), meta: { roles: ['ADMIN', 'PRINCIPAL', 'ACADEMIC'] } },
       { path: 'academic/subjects', name: 'AcademicSubjects', component: () => import('../views/academic/SubjectList.vue'), meta: { roles: ['ADMIN', 'PRINCIPAL', 'ACADEMIC', 'HEAD_TEACHER', 'TEACHER'] } },
       { path: 'academic/classes', name: 'AcademicClasses', component: () => import('../views/academic/ClassList.vue'), meta: { roles: ['ADMIN', 'PRINCIPAL', 'ACADEMIC', 'HEAD_TEACHER'] } },
       { path: 'academic/scores', name: 'AcademicScores', component: () => import('../views/academic/ScoreList.vue'), meta: { roles: ['ADMIN', 'ACADEMIC', 'HEAD_TEACHER', 'TEACHER'] } },

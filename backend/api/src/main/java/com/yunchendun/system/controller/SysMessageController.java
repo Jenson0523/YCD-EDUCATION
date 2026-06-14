@@ -134,6 +134,22 @@ public class SysMessageController {
         return ApiResponse.ok(Map.of("count", count));
     }
 
+    /**
+     * 首页弹窗：返回当前用户未读的"通知公告"（个人消息），用于小程序首页弹窗提示。
+     * 只返回个人未读公告（receiverId=自己），最多5条。
+     */
+    @GetMapping("/popup")
+    public ApiResponse<List<SysMessage>> popup() {
+        Long userId = StpUtil.getLoginIdAsLong();
+        List<SysMessage> list = messageMapper.selectList(new LambdaQueryWrapper<SysMessage>()
+                .eq(SysMessage::getReceiverId, userId)
+                .eq(SysMessage::getIsRead, 0)
+                .eq(SysMessage::getBizType, "ANNOUNCEMENT")
+                .orderByDesc(SysMessage::getCreatedAt)
+                .last("LIMIT 5"));
+        return ApiResponse.ok(list);
+    }
+
     /** 标记单条已读（仅限自己的消息） */
     @PutMapping("/{id}/read")
     public ApiResponse<Void> markRead(@PathVariable Long id) {
