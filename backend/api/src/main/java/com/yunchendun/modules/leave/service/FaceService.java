@@ -138,31 +138,76 @@ public class FaceService {
             log.warn("刷脸识别：抓拍照片缺失或无可用引擎，captured={}, engine={}", captured, eng);
             return Collections.emptyList();
         }
-        double th = activeThreshold(eng);
 
+        // 百度引擎：用原生 1:N 人脸搜索，仅 1 次API调用（避免逐个比对触发QPS限流→全员识别失败）
+        if ("baidu".equalsIgnoreCase(provider) && baiduEngine.isReady()) {
+            return recognizeByBaiduSearch(library, captured);
+        }
+
+        // 其他引擎：逐个 compareImages
+        double th = activeThreshold(eng);
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (FaceRecord r : library) {
             File enrolled = resolveImageFile(r.getFacePhotoUrl());
             if (enrolled == null) continue;
-            // 统一用 compareImages：本地引擎走特征比对，云端引擎(百度/腾讯)走API直比，
-            // 避免云端 compareFeature 恒为0导致1:N全部识别失败
             double score = eng.compareImages(captured, enrolled);
-            if (score < th) continue; // 低于阈值不作为候选，杜绝误判
-
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("studentId", r.getStudentId());
-            m.put("studentNo", r.getStudentNo());
-            m.put("realName", r.getRealName());
-            m.put("className", r.getClassName());
-            m.put("gradeName", r.getGradeName());
-            m.put("headTeacherName", r.getHeadTeacherName());
-            m.put("facePhotoUrl", r.getFacePhotoUrl());
-            m.put("score", Math.round(score * 10.0) / 10.0);
-            candidates.add(m);
+            if (score < th) continue;
+            candidates.add(buildCandidate(r, score));
         }
-        // 按分数降序，取 Top-5
         candidates.sort((a, b) -> Double.compare((Double) b.get("score"), (Double) a.get("score")));
         return candidates.size() > 5 ? candidates.subList(0, 5) : candidates;
+    }
+
+    /** 百度原生1:N搜索：1次调用，按 user_id(学籍号) 映射回库记录 */
+    private List<Map<String, Object>> recognizeByBaiduSearch(List<FaceRecord> library, File captured) {
+        Map<String, FaceRecord> byNo = new HashMap<>();
+        for (FaceRecord r : library) if (r.getStudentNo() != null) byNo.put(r.getStudentNo(), r);
+
+        List<Map<String, Object>> hits = baiduEngine.searchFaces(captured, 5);
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        for (Map<String, Object> h : hits) {
+            String no = String.valueOf(h.get("userId"));
+            double score = h.get("score") instanceof Number ? ((Number) h.get("score")).doubleValue() : 0.0;
+            if (score < threshold) continue;
+            FaceRecord r = byNo.get(no);
+            if (r == null) continue; // 不在本次可放行范围（如已离校被过滤）
+            candidates.add(buildCandidate(r, score));
+        }
+        return candidates;
+    }
+
+    private Map<String, Object> buildCandidate(FaceRecord r, double score) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("studentId", r.getStudentId());
+        m.put("studentNo", r.getStudentNo());
+        m.put("realName", r.getRealName());
+        m.put("className", r.getClassName());
+        m.put("gradeName", r.getGradeName());
+        m.put("headTeacherName", r.getHeadTeacherName());
+        m.put("facePhotoUrl", r.getFacePhotoUrl());
+        m.put("score", Math.round(score * 10.0) / 10.0);
+        return m;
+    }
+
+    /**
+     * 录入/更新时同步人脸到云端人脸库（百度faceset）。
+     * 非百度引擎无需注册（本地直接比对文件）→ 返回成功。
+     * @return {success, message}
+     */
+    public Map<String, Object> registerToLibrary(String studentNo, String studentName, String facePhotoUrl) {
+        if (!"baidu".equalsIgnoreCase(provider) || !baiduEngine.isReady()) {
+            return Map.of("success", true, "message", "非云端引擎，无需注册");
+        }
+        File f = resolveImageFile(facePhotoUrl);
+        if (f == null) return Map.of("success", false, "message", "照片文件不存在");
+        return baiduEngine.registerFace(studentNo, studentName, f);
+    }
+
+    /** 从云端人脸库移除（禁用/删除档案时调用） */
+    public void removeFromLibrary(String studentNo) {
+        if ("baidu".equalsIgnoreCase(provider) && baiduEngine.isReady() && studentNo != null) {
+            baiduEngine.deleteFace(studentNo);
+        }
     }
 
     /** 当前引擎信息（供前端/调试展示） */

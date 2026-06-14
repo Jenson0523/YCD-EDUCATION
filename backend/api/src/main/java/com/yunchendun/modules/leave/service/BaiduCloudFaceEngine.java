@@ -45,6 +45,9 @@ public class BaiduCloudFaceEngine implements FaceRecognitionEngine {
     private static final String TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token";
     private static final String MATCH_URL = "https://aip.baidubce.com/rest/2.0/face/v3/match";
     private static final String SEARCH_URL = "https://aip.baidubce.com/rest/2.0/face/v3/search";
+    private static final String FACE_ADD_URL = "https://aip.baidubce.com/rest/2.0/face/v3/faceset/user/add";
+    private static final String FACE_UPDATE_URL = "https://aip.baidubce.com/rest/2.0/face/v3/faceset/user/update";
+    private static final String FACE_DELETE_URL = "https://aip.baidubce.com/rest/2.0/face/v3/faceset/user/delete";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Value("${face.api.baidu.api-key:}")
@@ -194,6 +197,71 @@ public class BaiduCloudFaceEngine implements FaceRecognitionEngine {
         } catch (Exception e) {
             log.error("百度云人脸搜索异常: {}", e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 注册/更新人脸到百度人脸库（user_id = 学籍号）。
+     * 已存在则覆盖该用户的人脸（action_type=REPLACE），实现"重新录入即时生效"。
+     * @return {success:bool, message:string}
+     */
+    public Map<String, Object> registerFace(String studentNo, String studentName, File faceImage) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            String imgBase64 = imageToBase64(faceImage);
+            if (imgBase64 == null) { result.put("success", false); result.put("message", "照片读取失败"); return result; }
+            String token = getAccessToken();
+            if (token == null) { result.put("success", false); result.put("message", "百度云token获取失败"); return result; }
+
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("image", imgBase64);
+            params.put("image_type", "BASE64");
+            params.put("group_id", groupId);
+            params.put("user_id", studentNo);
+            if (studentName != null) params.put("user_info", studentName);
+            params.put("quality_control", "NORMAL");   // 质量控制，过滤模糊照
+            params.put("liveness_control", "NONE");
+            params.put("action_type", "REPLACE");      // 已存在则覆盖（重新录入）
+            String body = MAPPER.writeValueAsString(params);
+
+            // 先尝试 add；若用户已存在(error 223113)或直接成功则OK，否则 update
+            JsonNode resp = postJson(FACE_ADD_URL + "?access_token=" + token, body);
+            int err = resp == null ? -1 : resp.path("error_code").asInt(-1);
+            if (err != 0) {
+                // 用户已存在 → 走 update
+                resp = postJson(FACE_UPDATE_URL + "?access_token=" + token, body);
+                err = resp == null ? -1 : resp.path("error_code").asInt(-1);
+            }
+            if (err == 0) {
+                result.put("success", true);
+                result.put("message", "人脸入库成功");
+            } else {
+                String msg = resp == null ? "无响应" : resp.path("error_msg").asText("unknown");
+                // 222202=图片中没有人脸；判为照片不合格
+                if (err == 222202) msg = "未检测到清晰人脸，请上传正脸照片";
+                result.put("success", false);
+                result.put("message", "人脸入库失败：" + msg);
+                log.warn("百度云 registerFace 失败 studentNo={} err={} msg={}", studentNo, err, msg);
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "人脸入库异常：" + e.getMessage());
+            log.error("百度云 registerFace 异常: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    /** 从百度人脸库删除某学生的人脸（禁用/删除档案时调用） */
+    public void deleteFace(String studentNo) {
+        try {
+            String token = getAccessToken();
+            if (token == null) return;
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("group_id", groupId);
+            params.put("user_id", studentNo);
+            postJson(FACE_DELETE_URL + "?access_token=" + token, MAPPER.writeValueAsString(params));
+        } catch (Exception e) {
+            log.warn("百度云 deleteFace 异常: {}", e.getMessage());
         }
     }
 

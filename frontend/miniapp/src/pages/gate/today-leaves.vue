@@ -106,12 +106,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { onShow, onHide } from '@dcloudio/uni-app';
 import { request } from '../../api/request';
 
 const list = ref([]);
 const loading = ref(true);
 const filter = ref('all'); // all / departed / pending
+let pollTimer = null;
+
+// 静默刷新（不闪loading），供轮询使用——多门卫同时登录时实时同步
+const refresh = async () => {
+  try { list.value = await request({ url: '/leave/applications/today-valid' }) || []; } catch {}
+};
 
 const departed = computed(() => list.value.filter(i => i.departAt).length);
 const pending = computed(() => list.value.filter(i => !i.departAt).length);
@@ -135,6 +142,15 @@ onMounted(async () => {
     uni.showToast({ title: e.message || '加载失败', icon: 'none' });
   } finally { loading.value = false; }
 });
+
+// 页面显示时启动轮询（每15秒），离开时停止——实现多门卫实时刷新
+onShow(() => {
+  refresh();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refresh, 15000);
+});
+onHide(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } });
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 
 const goDetail = (id) => uni.navigateTo({ url: `/pages/leave/detail?id=${id}` });
 // 待离校学生 → 跳到刷脸核验页（门卫直接给该生刷脸放行）

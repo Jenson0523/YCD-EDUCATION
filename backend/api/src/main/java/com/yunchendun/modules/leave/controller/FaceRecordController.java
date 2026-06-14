@@ -168,6 +168,14 @@ public class FaceRecordController {
             target = record;
         }
 
+        // 先同步到云端人脸库（百度faceset）。照片检测不到人脸则拒绝录入，
+        // 避免存入"无法识别"的坏档案（解决重新录入后识别失败问题）。
+        Map<String, Object> reg = faceService.registerToLibrary(
+                target.getStudentNo(), target.getRealName(), record.getFacePhotoUrl());
+        if (Boolean.FALSE.equals(reg.get("success"))) {
+            return ApiResponse.fail(400, String.valueOf(reg.get("message")));
+        }
+
         // 授权摘要
         target.setConsentVersion(FaceConsentService.CONSENT_VERSION);
         target.setConsentAt(LocalDateTime.now());
@@ -209,6 +217,7 @@ public class FaceRecordController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         FaceRecord rec = faceRecordMapper.selectById(id);
         if (rec == null) return ApiResponse.fail(404, "档案不存在");
+        faceService.removeFromLibrary(rec.getStudentNo()); // 同步移除云端人脸库
         faceRecordMapper.deleteById(id);
         return ApiResponse.ok(null);
     }
@@ -220,8 +229,15 @@ public class FaceRecordController {
                                           @RequestBody Map<String, String> body) {
         FaceRecord rec = faceRecordMapper.selectById(id);
         if (rec == null) return ApiResponse.fail(404, "档案不存在");
-        rec.setStatus(body.get("status"));
+        String status = body.get("status");
+        rec.setStatus(status);
         faceRecordMapper.updateById(rec);
+        // 禁用→移出云端人脸库；启用→重新入库
+        if ("DISABLED".equals(status)) {
+            faceService.removeFromLibrary(rec.getStudentNo());
+        } else if ("ACTIVE".equals(status)) {
+            faceService.registerToLibrary(rec.getStudentNo(), rec.getRealName(), rec.getFacePhotoUrl());
+        }
         return ApiResponse.ok(null);
     }
 

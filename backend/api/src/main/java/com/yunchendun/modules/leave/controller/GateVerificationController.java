@@ -76,7 +76,59 @@ public class GateVerificationController {
         double faceScore = faceResult.get("score") instanceof Number
                 ? ((Number) faceResult.get("score")).doubleValue() : 0.0;
         boolean faceOk = (boolean) faceResult.getOrDefault("passed", false);
+        return ApiResponse.ok(processVerify(studentNo, capturePhotoUrl, faceScore, faceOk, verifyType, verifierId));
+    }
 
+    /**
+     * 刷脸自动核验放行（简化门卫操作）：
+     *   抓拍 → 1:N识别最匹配学生 → 有已批准假条则【自动放行】并记录；
+     *   无有效假条 → 返回 NO_LEAVE + 学生信息，门卫可选择"发起临时审批"走流程。
+     */
+    @PostMapping("/scan")
+    public ApiResponse<Map<String, Object>> scan(@RequestBody Map<String, Object> body) {
+        String opRole = dataPermissionHelper.current().getRoleCode();
+        if (!"GATE".equals(opRole) && !"ADMIN".equals(opRole)) {
+            return ApiResponse.fail(403, "仅门卫可刷脸核验");
+        }
+        String capturePhotoUrl = (String) body.get("capturePhotoUrl");
+        Long verifierId = StpUtil.getLoginIdAsLong();
+
+        // 今日可放行人脸库：ACTIVE + 有照片 + 今日未通过核验离校
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        java.util.Set<String> departedNos = verifyMapper.selectList(new LambdaQueryWrapper<GateVerification>()
+                        .eq(GateVerification::getResult, "PASS").ge(GateVerification::getVerifiedAt, startOfDay))
+                .stream().map(GateVerification::getStudentNo).filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        List<FaceRecord> lib = faceRecordMapper.selectList(new LambdaQueryWrapper<FaceRecord>()
+                .eq(FaceRecord::getStatus, "ACTIVE")
+                .isNotNull(FaceRecord::getFacePhotoUrl).ne(FaceRecord::getFacePhotoUrl, "")
+                .notIn(!departedNos.isEmpty(), FaceRecord::getStudentNo, departedNos)
+                .last("LIMIT 50"));
+
+        List<Map<String, Object>> cands = faceService.recognize(lib, capturePhotoUrl);
+        if (cands.isEmpty()) {
+            Map<String, Object> r = new java.util.LinkedHashMap<>();
+            r.put("result", "NO_MATCH");
+            r.put("message", "未识别到学生，请正对镜头重试，或确认该生已录入人脸");
+            return ApiResponse.ok(r);
+        }
+        Map<String, Object> top = cands.get(0);
+        String studentNo = String.valueOf(top.get("studentNo"));
+        double faceScore = top.get("score") instanceof Number ? ((Number) top.get("score")).doubleValue() : 0.0;
+
+        Map<String, Object> resp = processVerify(studentNo, capturePhotoUrl, faceScore, true, "DEPART", verifierId);
+        // 附带学生展示信息
+        resp.put("realName", top.get("realName"));
+        resp.put("className", top.get("className"));
+        resp.put("gradeName", top.get("gradeName"));
+        resp.put("studentId", top.get("studentId"));
+        resp.put("facePhotoUrl", top.get("facePhotoUrl"));
+        return ApiResponse.ok(resp);
+    }
+
+    /** 共享核验逻辑：查当日有效假条→记日志→有批准假条则放行(标记离校+通知家长)，否则拦截/无假条 */
+    private Map<String, Object> processVerify(String studentNo, String capturePhotoUrl,
+                                              double faceScore, boolean faceOk, String verifyType, Long verifierId) {
         // 查找当日有效假条（已审批且未离校）
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LeaveApplication leave = leaveMapper.selectOne(
@@ -190,7 +242,7 @@ public class GateVerificationController {
             messageMapper.insert(warn);
         }
 
-        return ApiResponse.ok(resp);
+        return resp;
     }
 
     /**

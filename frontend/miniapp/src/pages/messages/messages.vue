@@ -127,7 +127,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { onShow, onHide } from '@dcloudio/uni-app';
 import { request } from '../../api/request';
 
 const roleCode = uni.getStorageSync('ycd_roleCode') || '';
@@ -262,7 +263,15 @@ const fmtTime = (dt) => {
   return dt.replace('T', ' ').slice(0, 16);
 };
 
+let pollTimer = null;
 onMounted(() => load());
+// 轮询刷新（每15秒）——多账号同时登录消息实时同步
+onShow(() => {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => { pageNo.value = 1; load(); }, 15000);
+});
+onHide(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } });
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 </script>
 
 <style scoped>
