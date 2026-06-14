@@ -494,17 +494,19 @@ const handleLogout = () => {
 .footer { padding: 52rpx 28rpx 0; text-align: center; }
 .brand-name { display: block; font-size: 24rpx; font-weight: 600; color: #94A3B8; letter-spacing: 4rpx; }
 .brand-slogan { display: block; margin-top: 8rpx; font-size: 20rpx; color: #CBD5E1; letter-spacing: 2rpx; }
-.logout-btn {
-  margin-top: 36rpx; padding: 22rpx 0; text-align: center;
-  background: #fff; border: 1rpx solid #FEE2E2; border-radius: 14rpx;
+.footer-actions { display: flex; gap: 20rpx; justify-content: center; align-items: stretch; margin-top: 36rpx; }
+.footer-btn, .logout-btn {
+  flex: 1; max-width: 280rpx; height: 84rpx;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border-radius: 14rpx;
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.03);
+  box-sizing: border-box;
 }
+.footer-btn { border: 1rpx solid #E2E8F0; }
+.logout-btn { border: 1rpx solid #FEE2E2; }
 .logout-press { opacity: 0.85; }
+.footer-btn-text { font-size: 26rpx; color: #475569; letter-spacing: 2rpx; }
 .logout-text { font-size: 26rpx; color: #EF4444; letter-spacing: 2rpx; }
-.footer-actions { display: flex; gap: 20rpx; justify-content: center; margin-top: 8rpx; }
-.footer-btn { padding: 18rpx 40rpx; background: #fff; border: 1rpx solid #E2E8F0; border-radius: 14rpx; }
-.footer-btn-text { font-size: 26rpx; color: #475569; }
-.logout-btn { padding: 18rpx 40rpx; background: #fff; border: 1rpx solid #FECACA; border-radius: 14rpx; }
 
 /* 通知公告弹窗 */
 .anno-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; display: flex; align-items: center; justify-content: center; }
